@@ -2,9 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>DeepSeek Chat · 多会话</title>
 <meta name="color-scheme" content="light">
+  <!-- PWA / 添加到主屏幕（iOS + Android 都要这几行） -->
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DS Chat">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230a7cff'/%3E%3Cpath d='M9 12h14M9 16h10M9 20h7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <!-- 依赖已本地化到 vendor/，不再走 CDN：加载从 ~29s 降到本地即时，且可离线使用 -->
 <style>
@@ -4047,6 +4055,19 @@ button:focus-visible,
   .msg-user, .msg-ai { max-width: 100%; }
 
 }
+
+  /* ---------- PWA / 全屏适配（添加到桌面后更有 App 感） ---------- */
+  html, body { overscroll-behavior: none; }                 /* 去掉整页橡皮筋 */
+  body { -webkit-tap-highlight-color: transparent; }         /* 点按钮不再闪灰 */
+  button, .side-btn, .sp-btn, .sp-seg-item, .sp-id-btn { touch-action: manipulation; }
+  .app {                                                     /* 横屏刘海侧边安全区 */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  @media (display-mode: standalone) {                        /* 独立窗口（无浏览器地址栏） */
+    body { padding: 0; }
+    .app { height: 100dvh; }
+  }
 </style>
 
 </head>
@@ -4063,7 +4084,7 @@ button:focus-visible,
     <button class="new-chat-btn" id="newChatBtn">＋ 新对话</button>
     <div class="chat-list" id="chatList"></div>
     <div class="sidebar-actions">
-      <button class="side-btn" id="exportBtn" title="把全部会话导出为 JSON 备份文件">⬇ 导出</button>
+      <button class="side-btn" id="exportBtn" title="把全部会话导出为 JSON 备份文件（不含 API 密钥）">⬇ 导出</button>
       <button class="side-btn" id="importBtn" title="从 JSON 备份文件恢复会话（合并，不会覆盖）">⬆ 导入</button>
       <button class="side-btn" id="novelBtn" title="把当前会话导出成可读的小说 / 剧本（Markdown）">📖 小说</button>
       <button class="side-btn" id="recapBtn" title="把剧情压成「前情提要」，可复制给别的 AI 接着演，或直接开个新会话">🧭 续接</button>
@@ -6058,13 +6079,20 @@ button:focus-visible,
       userInfo: userInfo,
       defaultAiInfo: defaultAiInfo,
       customModels: customModels,
-      settings: settings
+      // ⚠️ 密钥不进备份 ✗ —— settings.directKeys 里是明文密钥，而备份文件常常会被
+      // 传来传去（微信 / 网盘 / 邮件）。漏一次就等于把你的额度公开了。
+      // 这里清空成空字符串：导入时还是"未填"，你自己重新填一次就行。
+      settings: (function() {
+        const s = Object.assign({}, settings);
+        s.directKeys = { deepseek: '', kimi: '', relay: '' };   // 密钥一律不进备份 ✗
+        return s;
+      })()
     };
     const d = new Date();
     const name = 'deepseek-chats-' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
       '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + '.json';
     downloadFile(name, JSON.stringify(payload, null, 2), 'application/json');
-    setStatus('已导出 ' + chats.length + ' 个会话', false);
+    setStatus('已导出 ' + chats.length + ' 个会话（不含密钥 ✓）', false);
   }
 
   function importFromFile(file) {
