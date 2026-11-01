@@ -58,6 +58,16 @@
   }
 
   /* ============ 桌布（呼吸動畫） ============ */
+  /* iOS 上 overflow+border-radius 在"祖先有 transform"时不裁剪（壁纸会溢出圆角）
+     → 给壁纸单独一层，用 mask + clip-path 双保险；只包壁纸，不影响任何 backdrop-filter */
+  .wall-clip{
+    position:absolute; inset:0; z-index:0;
+    border-radius:47px; overflow:hidden;
+    -webkit-mask-image:-webkit-radial-gradient(white, black);
+    mask-image:-webkit-radial-gradient(white, black);
+    clip-path:inset(0 round 47px);
+    transform:translateZ(0);
+  }
   .wallpaper{
     position:absolute; inset:0;
     background-image:url('wallpaper.jpg');
@@ -2413,7 +2423,7 @@ window.hasBrain = function () {
     <span class="side power"></span>
 
     <div class="screen locked" id="screen">
-      <div class="wallpaper"></div>
+      <div class="wall-clip"><div class="wallpaper"></div></div>
 
       <!-- ================= 鎖定畫面 ================= -->
       <section class="layer lock active" id="lockScreen">
@@ -4108,15 +4118,11 @@ window.hasBrain = function () {
       busy = false;
     }, 800);
 
-    // 密碼錯了：後台問一次 AI，她決定要不要開口
-    function hostRP() { try { if (window.parent && window.parent !== window && window.parent.__RP && window.parent.__RP.ready) return window.parent.__RP; } catch (e) {} return null; }
-  function hostSystem() { var RP = hostRP(); try { return RP ? (RP.system() || "") : ""; } catch (e) { return ""; } }
-  function hasBrain() { return !!hostRP() || !!(cfg && cfg.key && cfg.key.trim()); }
-  var withKey = hasBrain();
-    if (withKey){
-      reportAction('輸入錯誤的鎖屏密碼');
-    } else {
-      showBanner(LINES[Math.min(errorCount - 1, LINES.length - 1)]);
+    // 输错密码：先立刻弹一条（保证一定有反应），有"脑子"再让 AI 补一句更狠的
+    var _line = LINES[Math.min(errorCount - 1, LINES.length - 1)];
+    if (_line) showBanner(_line);
+    if (typeof hasBrain === "function" && hasBrain()) {
+      try { reportAction("輸入錯誤的密碼欸"); } catch (e) {}
     }
   }
 
@@ -5660,7 +5666,9 @@ window.hasBrain = function () {
   var reportQueue = [];
 
   function reportAction(detail){
-    if (!cfg.key || !cfg.key.trim()) return;
+    // 原来只看本机 key；现在小手机可以借用前端的脑子，所以改成看 hasBrain()
+    var _ok = (typeof hasBrain === "function") ? hasBrain() : !!(cfg && cfg.key && cfg.key.trim());
+    if (!_ok) return;
     if (!detail) return;
     reportQueue.push(String(detail));
     pumpReports();
