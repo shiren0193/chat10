@@ -4256,6 +4256,29 @@ button:focus-visible,
 
       <div class="sp-sep"></div>
       <div class="sp-head">
+        <span class="sp-title">小手机联动</span>
+        <span class="sp-badge" id="spPhoneBadge">—</span>
+      </div>
+      <div class="sp-ctx-row">
+        <button class="sp-id-btn" data-phone-mood="calm" style="flex:1">平静</button>
+        <button class="sp-id-btn" data-phone-mood="angry" style="flex:1">生气</button>
+        <button class="sp-id-btn" data-phone-mood="away" style="flex:1">离开</button>
+        <button class="sp-id-btn" data-phone-mood="miss" style="flex:1">想她</button>
+      </div>
+      <div class="sp-ctx-row">
+        <button class="sp-id-btn" id="spPhoneSync" style="flex:1">立即同步对话给手机</button>
+      </div>
+      <div class="sp-seg" id="spPhoneAutoSeg">
+        <button class="sp-seg-item" data-phone-auto="off">关</button>
+        <button class="sp-seg-item" data-phone-auto="on">开</button>
+      </div>
+      <div class="sp-ctx-row">
+        <button class="sp-id-btn" id="spPhoneNow" style="flex:1">现在让他发一条</button>
+      </div>
+      <div class="sp-tip" id="spPhoneTip">—</div>
+
+      <div class="sp-sep"></div>
+      <div class="sp-head">
         <span class="sp-title">最近删除</span>
         <span class="sp-badge" id="spTrashBadge">—</span>
       </div>
@@ -4652,6 +4675,7 @@ button:focus-visible,
   let customModels = [];
   let settings = { model: 'deepseek-flash', thinking: true, effort: 'high', antiGhostwrite: true,
     // 手机直连：不经过本机服务器，浏览器直接调用模型服务商（手机上单独打开这个 html 时用）
+    phoneAuto: false,
     directMode: false, directKeys: { deepseek: '', kimi: '', relay: '' }, directBases: { deepseek: '', kimi: '', relay: '' }, directBase: '' };
   let serverConfig = { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash', hasKey: true, providers: [] };
   let quickPrompts = DEFAULT_QUICKS.slice();
@@ -4699,9 +4723,135 @@ button:focus-visible,
 
   let storageFullWarned = false;
 
+  /* ---------- 小手机联动：让 AI 自己判定"现在分开了要不要发消息" ---------- */
+  let phoneJudgeAt = 0;
+  const PHONE_JUDGE_PROMPT = [
+    "你在扮演一个角色。请根据下面主线的最近对话，判断此刻的剧情是不是「你们不在一起」（他不在她身边、离开、分开、各自做事）。",
+    "如果是：以他的口吻给她的手机发一条 iMessage（1-2 句，口语，别解释设定、别写旁白、别加引号）。",
+    "严格只输出一行 JSON：{\"apart\":true,\"text\":\"要发的内容\"}；如果不是分开的场景，输出 {\"apart\":false}。",
+    "不要输出任何别的字。"
+  ].join("");
+  async function judgePhoneIncoming() {
+    try {
+      const chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+      if (!chat || !Array.isArray(chat.renderedTurns) || !chat.renderedTurns.length) return null;
+      const msgs = [];
+      chat.renderedTurns.slice(-6).forEach(function (tv) {
+        if (tv && tv.user && String(tv.user).trim()) msgs.push({ role: "user", content: String(tv.user) });
+        if (tv && tv.assistant && String(tv.assistant).trim()) msgs.push({ role: "assistant", content: String(tv.assistant) });
+      });
+      if (!msgs.length) return null;
+      const body = JSON.stringify({
+        model: chat.model || settings.model,
+        messages: [{ role: "system", content: PHONE_JUDGE_PROMPT }].concat(msgs),
+        thinking: false, stream: true, max_tokens: 160
+      });
+      const res = await fetch("/api/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: body });
+      if (!res.ok) return null;
+      const raw = await res.text();
+      let out = "";
+      raw.split("\n").forEach(function (line) {
+        const s = line.trim();
+        if (s.indexOf("data:") !== 0) return;
+        const d = s.slice(5).trim();
+        if (!d || d.charAt(0) !== "{") return;
+        try { const o = JSON.parse(d); if (o && o.text) out += o.text; } catch (e) {}
+      });
+      const m = out.match(/\{[\s\S]*\}/);
+      if (!m) return null;
+      let j = null;
+      try { j = JSON.parse(m[0]); } catch (e) { return null; }
+      if (!j || j.apart !== true || !j.text) return null;
+      const text = String(j.text).trim().slice(0, 300);
+      if (!text) return null;
+      localStorage.setItem("lz.incoming.v1", JSON.stringify({ text: text, name: chat.aiName || "他", ts: Date.now() }));
+      setStatus("他的手机：刚给你发来一条", false);
+      return text;
+    } catch (e) { return null; }
+  }
+
+  /* ---------- 小手机联动：状态按钮 ---------- */
+  (function () {
+    const moods = document.querySelectorAll("[data-phone-mood]");
+    const LABEL = { calm: "平静", angry: "生气", away: "离开", miss: "想她" };
+    const REASON = { calm: "", angry: "他在生你的气", away: "他不在（出去了）", miss: "他在想你" };
+    moods.forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const mood = b.dataset.phoneMood || "calm";
+        const PB = window.PhoneBridge;
+        if (!PB || !PB.setState) { setStatus("手机桥接没加载（手机桥接.js）", true); return; }
+        PB.setState(mood, REASON[mood] || "");
+        const badge = document.getElementById("spPhoneBadge");
+        if (badge) badge.textContent = LABEL[mood] || mood;
+        const tip = document.getElementById("spPhoneTip");
+        if (tip) tip.textContent = mood === "calm"
+          ? "已设为「平静」：手机解锁时不会额外开口。"
+          : "已设为「" + (LABEL[mood] || mood) + "」：手机一解锁，他会先开口（挑一句对应的话 + 顶部横幅）。";
+        setStatus("小手机状态：" + (LABEL[mood] || mood), false);
+      });
+    });
+    const autoSeg = document.getElementById("spPhoneAutoSeg");
+    if (autoSeg) autoSeg.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const b = e.target.closest ? e.target.closest("[data-phone-auto]") : null;
+      if (!b) return;
+      settings.phoneAuto = (b.dataset.phoneAuto === "on");
+      saveSettings();
+      renderSettingsPopup();
+      setStatus(settings.phoneAuto ? "已开启：分开的剧情里他会自己发消息（5 分钟最多判定一次）" : "已关闭自动判定", false);
+    });
+    const nowBtn = document.getElementById("spPhoneNow");
+    if (nowBtn) nowBtn.addEventListener("click", async function (e) {
+      e.stopPropagation();
+      setStatus("正在让他想一条…", true);
+      const txt = await judgePhoneIncoming();
+      setStatus(txt ? "他的手机：刚给你发来一条" : "判定：现在不像「分开」的场景（或没拿到内容）", false);
+    });
+    const syncBtn = document.getElementById("spPhoneSync");
+    if (syncBtn) syncBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const PB = window.PhoneBridge;
+      if (!PB || typeof syncPhoneBridge !== "function") { setStatus("手机桥接没加载", true); return; }
+      phoneBridgeSig = "";
+      syncPhoneBridge();
+      setStatus("已把最近 16 轮同步给小手机", false);
+    });
+  })();
+
+  /* ---------- 手机桥接：把主线最近的对话同步给「小手机」 ---------- */
+  let phoneBridgeSig = "", phoneBridgeAt = 0;
+  function syncPhoneBridge() {
+    try {
+      const PB = window.PhoneBridge;
+      if (!PB || typeof PB.pushHistory !== "function") return;
+      const chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+      if (!chat || !Array.isArray(chat.renderedTurns) || !chat.renderedTurns.length) return;
+      const msgs = [];
+      chat.renderedTurns.slice(-16).forEach(function (tv) {
+        if (tv && tv.user && String(tv.user).trim()) msgs.push({ role: "user", content: String(tv.user) });
+        if (tv && tv.assistant && String(tv.assistant).trim()) msgs.push({ role: "assistant", content: String(tv.assistant) });
+      });
+      if (!msgs.length) return;
+      const sig = chat.id + "|" + msgs.length + "|" + msgs[msgs.length - 1].content.length + "|" + msgs[0].content.length;
+      const now = Date.now();
+      if (sig === phoneBridgeSig && now - phoneBridgeAt < 4000) return;
+      phoneBridgeSig = sig; phoneBridgeAt = now;
+      PB.pushHistory(msgs);
+      // 自动模式：分开的剧情里让他自己发消息（5 分钟最多判定一次）
+      if (settings.phoneAuto && !isStreaming && Date.now() - phoneJudgeAt > 300000) {
+        phoneJudgeAt = Date.now();
+        judgePhoneIncoming();
+      }
+      const ur = (chat.persona && chat.persona.userRole) || "";
+      if (PB.setRole && String(ur).trim()) PB.setRole(chat.userName || "", ur);   // 她的设定也同步过去
+    } catch (e) {}
+  }
+
   function saveChats() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+      syncPhoneBridge();   // 顺手把最近的几轮同步给「小手机」
       return true;
     } catch (e) {
       // 绝不静默失败：写不进去就意味着"新消息丢了"。原来这里只 console.error，
@@ -4795,6 +4945,7 @@ button:focus-visible,
       // 默认 true：不许 AI 代写"我"的言行。老配置里没这个字段就按默认 true 走。
       if (typeof obj.antiGhostwrite === 'boolean') settings.antiGhostwrite = obj.antiGhostwrite;
       // 手机直连
+      if (typeof obj.phoneAuto === 'boolean') settings.phoneAuto = obj.phoneAuto;
       if (typeof obj.directMode === 'boolean') settings.directMode = obj.directMode;
       if (obj.directKeys && typeof obj.directKeys === 'object') {
         settings.directKeys = {
@@ -5806,6 +5957,10 @@ button:focus-visible,
     const buEl = document.getElementById('spBaseUrl');
     if (buEl && document.activeElement !== buEl) buEl.value = String(settings.directBase || '');
     spDirectBadge.textContent = settings.directMode ? '开' : '关';
+    const autoSegEl = document.getElementById('spPhoneAutoSeg');
+    if (autoSegEl) autoSegEl.querySelectorAll('[data-phone-auto]').forEach(function (b) {
+      b.classList.toggle('active', (b.dataset.phoneAuto === 'on') === !!settings.phoneAuto);
+    });
     spDirectSeg.querySelectorAll('[data-direct]').forEach(function(b) {
       b.classList.toggle('active', (b.dataset.direct === 'on') === !!settings.directMode);
     });
@@ -6570,6 +6725,9 @@ button:focus-visible,
     // 放在固定位置是为了前缀稳定 —— 花名册不变，缓存就一直命中。
     const roster = groupRosterPrompt(chat);
     if (roster) parts.push(roster);
+    // 小手机（iMessage）里发生过的对话 → 主线这边也要知道（两边共用一份剧情）
+    const phoneStory = phoneStoryPrompt();
+    if (phoneStory) parts.push(phoneStory);
     // 不许代写"我"的言行。放在最后，位置固定 → 前缀稳定，不影响缓存。
     const ghost = antiGhostLine(chat);
     if (ghost) parts.push(ghost);
@@ -6577,6 +6735,36 @@ button:focus-visible,
     return '下面是你在这场角色扮演中的设定，请全程保持，不要出戏，也不要提及"设定"或"提示词"本身：\n\n' +
       parts.join('\n\n');
   }
+
+  /* 小手机里的对话（由小手机写进 lz.phone.story.v1）→ 拼成一段给主线的他看 */
+  function phoneStoryPrompt() {
+    try {
+      const o = JSON.parse(localStorage.getItem("lz.phone.story.v1") || "null");
+      const turns = (o && o.turns) || [];
+      if (!turns.length) return "";
+      const lines = turns.slice(-10).map(function (tv) {
+        const who = tv.role === "user" ? "她" : "你";
+        return who + "：" + String(tv.content).slice(0, 300);
+      });
+      return "【她在小手机（iMessage）里跟你的对话，最近的：\n" + lines.join("\n") +
+        "\n（这些和主线是同一段时间里的事，别当成没发生；自然接上，不用复述。）" +
+        "\n（手机上的对话如果已经告一段落/收尾了，就把场面带回主线这边继续，别一直停在手机里。）】";
+    } catch (e) { return ""; }
+  }
+
+  /* 给小手机（iframe）用的「同一个脑子」接口：同一份人设 / 同一个模型 / 同一把密钥 */
+  window.__RP = {
+    ready: true,
+    system: function () { const c = getCurrentChat(); return c ? composeSystemPrompt(c) : ""; },
+    model: function () { const c = getCurrentChat(); return (c && c.model) || settings.model; },
+    chatId: function () { const c = getCurrentChat(); return (c && c.id) || ""; },
+    aiName: function () { const c = getCurrentChat(); return (c && c.aiName) || ""; },
+    userName: function () { const c = getCurrentChat(); return (c && c.userName) || ""; },
+    direct: function () {
+      const k = settings.directKeys || {};
+      return { on: !!settings.directMode, deepseek: k.deepseek || "", kimi: k.kimi || "", relay: k.relay || "", base: settings.directBase || "" };
+    }
+  };
 
   function renderPersonaPopup() {
     const p = getPersona(getCurrentChat());
@@ -10323,5 +10511,7 @@ button:focus-visible,
   promptInput.focus();
 })();
 </script>
+  <!-- 手机桥接：右下角「打开小手机」按钮 + 与「小手机.html」同步对话 -->
+  <script src="手机桥接.js"></script>
 </body>
 </html>
