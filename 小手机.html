@@ -7518,8 +7518,22 @@ C 從九月開始固定在週二四點。
     return JSON.parse(JSON.stringify(SEED));
   }
 
+  /* 把备忘录同步给主前端：lz.phone.notes.v1（主线的 system 会读它） */
+  function syncPhoneNotes() {
+    try {
+      var out = [];
+      for (var i = 0; i < notes.length && out.length < 8; i++) {
+        var n = notes[i] || {};
+        var body = String(n.body || "").replace(/\s+/g, " ").trim();
+        out.push({ folder: n.folder || "", title: String(n.title || ""), body: body.slice(0, 220), day: n.day || "" });
+      }
+      localStorage.setItem("lz.phone.notes.v1", JSON.stringify({ notes: out, ts: Date.now() }));
+    } catch (e) {}
+  }
+
   function persist() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(notes)); } catch (e) {}
+    syncPhoneNotes();
   }
 
   var notes = loadNotes();

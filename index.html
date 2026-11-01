@@ -6728,6 +6728,9 @@ button:focus-visible,
     // 小手机（iMessage）里发生过的对话 → 主线这边也要知道（两边共用一份剧情）
     const phoneStory = phoneStoryPrompt();
     if (phoneStory) parts.push(phoneStory);
+    // 小手机备忘录里的内容（她写的）→ 主线这边也要知道
+    const phoneNotes = phoneNotesPrompt();
+    if (phoneNotes) parts.push(phoneNotes);
     // 不许代写"我"的言行。放在最后，位置固定 → 前缀稳定，不影响缓存。
     const ghost = antiGhostLine(chat);
     if (ghost) parts.push(ghost);
@@ -6749,6 +6752,22 @@ button:focus-visible,
       return "【她在小手机（iMessage）里跟你的对话，最近的：\n" + lines.join("\n") +
         "\n（这些和主线是同一段时间里的事，别当成没发生；自然接上，不用复述。）" +
         "\n（手机上的对话如果已经告一段落/收尾了，就把场面带回主线这边继续，别一直停在手机里。）】";
+    } catch (e) { return ""; }
+  }
+
+  /* 小手机备忘录（由小手机写进 lz.phone.notes.v1）→ 拼成一段给主线的他看 */
+  function phoneNotesPrompt() {
+    try {
+      const o = JSON.parse(localStorage.getItem("lz.phone.notes.v1") || "null");
+      const list = (o && o.notes) || [];
+      if (!list.length) return "";
+      const lines = list.slice(0, 8).map(function (n) {
+        const t = String(n.title || "").trim();
+        const b = String(n.body || "").trim();
+        return "· " + (t ? "《" + t + "》" : "（无标题）") + (b ? "：" + b : "");
+      });
+      return "【她手机备忘录里写的内容（你可能看过，或她跟你提过）：\n" + lines.join("\n") +
+        "\n（当成真的存在，别装作不知道；也不用逐条复述。）】";
     } catch (e) { return ""; }
   }
 
