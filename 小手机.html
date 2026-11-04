@@ -55,6 +55,20 @@
     position:relative; width:100%; height:100%;
     border-radius:47px; overflow:hidden;
     background:#000; isolation:isolate;
+    /* iOS Safari 在祖先有 transform 时，overflow:hidden 只裁矩形、不裁圆角，
+       设置页 / 密码页 / AI 面板的直角会盖到手机圆角外面。
+       clip-path 是这里唯一可靠的裁剪方式。 */
+    -webkit-clip-path: inset(0 round 47px);
+    clip-path: inset(0 round 47px);
+  }
+
+  /* 所有整屏图层都单独裁一次圆角：iOS 上只靠 .screen 的 overflow 不够 */
+  .layer,
+  .appview,
+  .ai-sheet,
+  .pass-set{
+    -webkit-clip-path: inset(0 round 47px);
+    clip-path: inset(0 round 47px);
   }
 
   /* ============ 桌布（呼吸動畫） ============ */
@@ -509,6 +523,9 @@
     flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
     background:#F2F2F7; padding-bottom:38px;
   }
+  /* 設定頁最後幾行（鎖屏密碼 / 鎖定畫面）不要貼著 Home 條被切掉 */
+  #view-settings .av-body{ padding-bottom: 72px; }
+  #view-settings .ios-group{ margin-bottom: 20px; }
   .av-body::-webkit-scrollbar{ width:0; height:0; }
 
   /* ---------- iOS 分組列表（設定類頁面通用） ---------- */
@@ -4019,10 +4036,11 @@ window.hasBrain = function () {
     if (!clock) return;
     var wrap = clock.parentNode;
     if (!wrap || !wrap.clientWidth) return;
-    var avail = Math.max(120, wrap.clientWidth - 26);
+    // 左右各留 20px：宁可略小一点，也不要在 iPhone 上让最后一位数字贴边被裁
+    var avail = Math.max(120, wrap.clientWidth - 40);
     clock.style.transform = 'none';
     var nat = clockNaturalWidth();
-    var target = Math.min(avail, 372);
+    var target = Math.min(avail, 360);
     var s = target / nat;
     if (!isFinite(s) || s <= 0) return;
     // 自然宽度量错时宁可缩小一点，也不要让数字溢出屏幕
@@ -6452,7 +6470,8 @@ window.hasBrain = function () {
     var k = screenEl.offsetWidth / (r.width || 1);
     var x = (e.clientX - r.left) * k;
     var y = (e.clientY - r.top) * k;
-    var onTime  = (y < 56 && x < 132);
+    // 必须同时满足非负，避免合成事件/无障碍事件坐标为 0 时误判成在点时间
+    var onTime  = (y >= 0 && y < 56 && x >= 0 && x < 132);
     var onClock = !!(e.target.closest && e.target.closest('.clock-wrap'));
     if (!onTime && !onClock) return;
     lpOrigin = { x: e.clientX, y: e.clientY };
@@ -8869,7 +8888,7 @@ C 從九月開始固定在週二四點。
   try { if (window.parent === window) return; } catch (e) { return; }
   var css = document.createElement("style");
   css.textContent = [
-    "#piBack{position:fixed;left:10px;top:calc(52px + env(safe-area-inset-top));z-index:88;display:flex;align-items:center;",
+    "#piBack{position:absolute;left:10px;top:10px;z-index:88;display:flex;align-items:center;",
     "  padding:6px 11px;border-radius:980px;border:0;background:rgba(28,28,30,.82);color:#fff;",
     "  font:12.5px/1 -apple-system,system-ui,sans-serif;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);",
     "  box-shadow:0 6px 20px rgba(0,0,0,.28);}",
@@ -8885,7 +8904,8 @@ C 從九月開始固定在週二四點。
     try { window.parent.postMessage({ source: "lu-phone", type: "close" }, "*"); } catch (e2) {}
     try { if (window.parent && window.parent.PhoneBridge) window.parent.PhoneBridge.close(); } catch (e3) {}
   });
-  document.body.appendChild(b);
+  // 放在手机外面的舞台左上角（和右上角的关闭键对称），不遮任何 App 内容
+  (document.querySelector('.stage') || document.body).appendChild(b);
 })();
 </script>
 </body>
