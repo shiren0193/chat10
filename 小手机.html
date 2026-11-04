@@ -583,7 +583,9 @@
     background:linear-gradient(160deg,#8FE7B4,#2F9E6A 60%,#1E7A50);
     color:#fff; font-size:17px; font-weight:600; display:grid; place-items:center;
     box-shadow:0 2px 6px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.4) inset;
+    overflow:hidden;
   }
+  .b-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
   .b-main{ flex:1; min-width:0; padding-top:1px; }
   .b-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1px; }
   .b-app{ font-size:11.5px; font-weight:600; letter-spacing:.3px; color:rgba(0,0,0,.52); }
@@ -758,6 +760,8 @@
     padding:7px 11px;
     letter-spacing:.2px;
   }
+  /* 被主前端嵌着时：API / 人設欄位全部藏起來，跟主前端共用一套 */
+  .ai-sheet.embedded .phone-host-hide{ display:none !important; }
   .ai-sheet{
     position:absolute; inset:0; z-index:64;
     opacity:0; pointer-events:none;
@@ -864,7 +868,8 @@
     /* 玻璃氣泡配色（淺色 = 原圖） */
     --text: #ffffff;
     --in-bg: rgba(18, 34, 56, .46);
-    --out-bg: rgba(59, 131, 233, .95);
+    /* 比 iOS 系統藍更深：和輸入框裡那個藍色游標拉開距離，一眼能找到游標 */
+    --out-bg: rgba(12, 82, 175, .96);
     --sub: rgba(255, 255, 255, .72);
     --glass: rgba(255, 255, 255, .18);
     --glass-line: rgba(255, 255, 255, .34);
@@ -879,7 +884,7 @@
 #view-messages.dark{
     --text: #ffffff;
     --in-bg: rgba(8, 12, 18, .58);
-    --out-bg: rgba(34, 116, 235, .95);
+    --out-bg: rgba(10, 74, 158, .97);
     --sub: rgba(255, 255, 255, .66);
     --glass: rgba(255, 255, 255, .14);
     --glass-line: rgba(255, 255, 255, .26);
@@ -1136,6 +1141,15 @@
   }
 #view-messages .msg.in .bubble{ background: var(--in-bg); color: var(--text); }
 #view-messages .msg.out .bubble{ background: var(--out-bg); color: var(--text); }
+  /* 語音氣泡：麥克風 + 時長 + 可讀的文字內容。
+     以前 AI 只丟一個 🎙 emoji 時，整條訊息會被當成 emoji-only 放大顯示，
+     真正的內容要點「編輯」才看得到。這裡把文字和麥克風放在同一個氣泡裡。 */
+  #view-messages .voice-bubble{ display:flex; flex-direction:column; gap:3px; min-width:132px; }
+  #view-messages .voice-head{ display:flex; align-items:center; gap:7px; font-weight:600; }
+  #view-messages .voice-mic{ display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.18); flex:0 0 22px; }
+  #view-messages .voice-dur{ font-size:12px; opacity:.78; letter-spacing:.2px; }
+  #view-messages .voice-text{ font-size:14.5px; line-height:1.45; font-weight:400; opacity:.96; white-space:pre-wrap; word-break:break-word; }
+  #view-messages .voice-text.empty{ opacity:.65; font-style:italic; }
 #view-messages .msg.ge.in .bubble{ border-bottom-left-radius: 5px; }
 #view-messages .msg.ge.out .bubble{ border-bottom-right-radius: 5px; }
 #view-messages .msg.ge .bubble::after{
@@ -2362,6 +2376,17 @@
   #view-notes .memo-edit-body{ padding-bottom: 30px; }
   #view-notes .memo-edit-hint{ padding-bottom: 22px; }
   #view-notes .memo-body{ padding-bottom: 14px; }
+  /* iOS 上祖先有 transform 时，overflow:hidden 不一定裁圆角，
+     备忘录里的白色背景 / 桌布会从手机圆角漏出来。这里单独双保险裁一次。 */
+  #view-notes,
+  #view-notes #app-memo,
+  #view-notes .memo-view{
+    border-radius: 47px;
+    overflow: hidden;
+    /* 只用 clip-path 裁圆角。不要再加 radial-gradient 的 mask：
+       那会把四边（尤其是顶部）变成半透明，壁纸就会从备忘录边缘透出来。 */
+    clip-path: inset(0 round 47px);
+  }
 
 </style>
 <!-- Markdown（AI 回覆氣泡用）；離線或 CDN 掛掉時自動退回內建簡易解析 -->
@@ -2439,7 +2464,7 @@ window.hasBrain = function () {
         <div class="lock-meta">
           <span>2 週一</span>
           <svg class="heart" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8.4-5.1-8.4-11A4.8 4.8 0 0 1 12 6.6 4.8 4.8 0 0 1 20.4 10c0 5.9-8.4 11-8.4 11Z"/></svg>
-          <span>與陸灼在一起的<span class="num">37</span>天</span>
+          <span id="lockDays">與他在一起的第<span class="num">1</span>天</span>
         </div>
 
         <div class="clock-wrap">
@@ -2699,12 +2724,12 @@ window.hasBrain = function () {
         <span class="ft-timer" id="ftTimer">00:00</span>
       </div>
 
-      <div class="ft-pip" title="方肴的鏡頭">
+      <div class="ft-pip" id="ftPip" title="她的鏡頭">
         <span class="ft-pip-media" id="ftPipMedia"></span>
-        <span class="ft-pip-tag">方肴</span>
+        <span class="ft-pip-tag" id="ftPipTag">她</span>
       </div>
 
-      <div class="ft-off" id="ftOff"><span>把鏡頭打開。我想看妳。</span></div>
+      <div class="ft-off" id="ftOff"><span id="ftOffText">把鏡頭打開。我想看妳。</span></div>
 
       <div class="ft-bar">
         <button class="ft-btn" type="button" id="ftMute" aria-label="靜音">
@@ -3071,7 +3096,7 @@ window.hasBrain = function () {
             <div class="ios-row">
               <span class="ios-ico" style="background:linear-gradient(180deg,#3EA0FF,#007AFF)"><svg><use href="#i-wifi"/></svg></span>
               <span class="ios-txt">Wi-Fi</span>
-              <span class="ios-val">陆灼</span>
+              <span class="ios-val" id="wifiName">陆灼</span>
             </div>
             <div class="ios-row">
               <span class="ios-ico" style="background:linear-gradient(180deg,#3EA0FF,#007AFF)"><svg><use href="#i-bt"/></svg></span>
@@ -3114,8 +3139,8 @@ window.hasBrain = function () {
           <div class="ios-group">
             <div class="ios-row" id="aiRow">
               <span class="ios-ico" style="background:linear-gradient(180deg,#7AE0B0,#2DB84C)"><svg><use href="#i-gear"/></svg></span>
-              <span class="ios-txt">聊天 AI</span>
-              <span class="ios-val">人設 / API</span>
+              <span class="ios-txt">聊天設定</span>
+              <span class="ios-val">跟隨主前端</span>
             </div>
           </div>
 
@@ -3129,7 +3154,7 @@ window.hasBrain = function () {
             </div>
           </div>
 
-          <div class="ios-foot">iOS 17.2 · 方餚的 iPhone</div>
+          <div class="ios-foot" id="iosFoot">iOS 17.2 · 她的 iPhone</div>
         </div>
       </section>
 
@@ -3473,8 +3498,11 @@ window.hasBrain = function () {
           </div>
 
           <div class="ai-scroll">
-            <div class="ai-cap"><b>API</b> · 相容 OpenAI / DeepSeek / 中轉站</div>
-            <div class="ai-card">
+            <div class="ai-note ok" id="aiHostNote" style="display:none;margin:14px 20px 0">
+              已跟隨主前端：角色、人設、API 與模型都由主聊天決定，這裡不用再單獨填。
+            </div>
+            <div class="ai-cap phone-host-hide"><b>API</b> · 相容 OpenAI / DeepSeek / 中轉站</div>
+            <div class="ai-card phone-host-hide">
               <label class="ai-field">
                 <span class="ai-label">網址</span>
                 <input class="ai-input" id="aiUrl" type="url" inputmode="url"
@@ -3509,20 +3537,24 @@ window.hasBrain = function () {
             </datalist>
 
             <div class="ai-acts">
-              <button class="ai-act" id="aiTest">測試連線</button>
-              <button class="ai-act danger" id="aiClear">清除對話</button>
+              <button class="ai-act phone-host-hide" id="aiTest">測試連線</button>
+              <button class="ai-act danger" id="aiClear">清除這段手機對話</button>
             </div>
             <div class="ai-note" id="aiNote"></div>
 
-            <div class="ai-cap"><b>人設</b> · System Prompt，可貼上萬字長篇</div>
-            <div class="ai-prompt">
+            <div class="ai-cap phone-host-hide"><b>人設</b> · System Prompt，可貼上萬字長篇</div>
+            <div class="ai-prompt phone-host-hide">
               <textarea class="ai-ta" id="aiPrompt" spellcheck="false"
                         placeholder="在這裡貼上陸灼的完整設定…"></textarea>
               <div class="ai-count" id="aiCount">0 字</div>
             </div>
-            <div class="ai-hint">
+            <div class="ai-hint phone-host-hide">
               每次發送都會把這段文字放在對話最前面（role: system），
               再附上最近「記憶輪數」的往來。內容只存在這台手機的 localStorage。
+            </div>
+            <div class="ai-hint" id="aiHostHint" style="display:none">
+              這段手機對話、備忘錄、未讀與角色名都按主聊天裡的「會話」分開保存；
+              切到哪個會話，小手機就變成那個人。
             </div>
           </div>
         </div>
@@ -3540,13 +3572,13 @@ window.hasBrain = function () {
       </div>
 
       <div class="banner" id="banner">
-        <div class="b-avatar">陸</div>
+        <div class="b-avatar" id="bannerAvatar">他</div>
         <div class="b-main">
           <div class="b-top">
             <span class="b-app">iMessage</span>
             <span class="b-time">現在</span>
           </div>
-          <div class="b-title">陸灼</div>
+          <div class="b-title" id="bannerTitle">他</div>
           <div class="b-text" id="bannerText">連個密碼都能按錯？</div>
         </div>
       </div>
@@ -3806,10 +3838,12 @@ window.hasBrain = function () {
   var unlocked  = false;
   var bannerTimer = null;
 
-  var LINES = [
-    '連個密碼都能按錯？',
-    '方餚，你今天手這麼滑？'
-  ];
+  function wrongPassLines(){
+    return [
+      '連個密碼都能按錯？',
+      userName() + '，你今天手這麼滑？'
+    ];
+  }
 
   /* ---------- 整體縮放適配 ---------- */
   var scale = 1;
@@ -4119,7 +4153,8 @@ window.hasBrain = function () {
     }, 800);
 
     // 输错密码：先立刻弹一条（保证一定有反应），有"脑子"再让 AI 补一句更狠的
-    var _line = LINES[Math.min(errorCount - 1, LINES.length - 1)];
+    var _lines = wrongPassLines();
+    var _line = _lines[Math.min(errorCount - 1, _lines.length - 1)];
     if (_line) showBanner(_line);
     if (typeof hasBrain === "function" && hasBrain()) {
       try { reportAction("輸入錯誤的密碼欸"); } catch (e) {}
@@ -4377,14 +4412,18 @@ window.hasBrain = function () {
     return t.replace(/^\s+|\s+$/g, '');
   })();
   /* 監控訊息專用協議：接在 system 尾巴上，只在 reportAction 時附上 */
-  var REPORT_RULE = [
-    '',
-    '【監控協議】',
-    '- 你會收到「方肴剛剛做了什麼」的系統提示。這是她自己也不知道你看到的事。',
-    '- 你可以選擇不理：那就只輸出 IGNORE，不要多說一個字。',
-    '- 也可以主動發一條訊息（就當成 iMessage 裡傳給她的），口氣照人設。',
-    '- 若你要直接打視訊電話給她，把 [發起通話] 放在回覆最後。'
-  ].join('\n');
+  function reportRule(){
+    return [
+      '',
+      '【監控協議】',
+      '- 你會收到「' + userName() + '剛剛做了什麼」的系統提示。這是她自己也不知道你看到的事。',
+      '- 你可以選擇不理：那就只輸出 IGNORE，不要多說一個字。',
+      '- 也可以主動發一條訊息（就當成 iMessage 裡傳給她的），口氣照人設。',
+      '- 若你要直接打視訊電話給她，把 [發起通話] 放在回覆最後。'
+    ].join('\n');
+  }
+
+  var EMBEDDED = !!window.hostRP();
 
   var cfg = { url: DEFAULT_URL, key: '', model: DEFAULT_MODEL, rounds: 20, prompt: DEFAULT_PROMPT };
 
@@ -4408,25 +4447,93 @@ window.hasBrain = function () {
   }
   function saveCfg(){
     try {
-      var o = { url: cfg.url, key: cfg.key, model: cfg.model, rounds: cfg.rounds, noAct: (cfg.noAct !== false),
-                prompt: cfg.prompt, promptVer: PERSONA_VER };
+      // 嵌在主前端裡時，只保存手機自己的偏好（noAct），不要覆蓋主前端的 API / 人設。
+      var prev = {};
+      try { prev = JSON.parse(localStorage.getItem(CFG_KEY) || '{}') || {}; } catch (e2) {}
+      var o = Object.assign({}, prev, { noAct: (cfg.noAct !== false) });
+      if (!EMBEDDED) {
+        o.url = cfg.url; o.key = cfg.key; o.model = cfg.model; o.rounds = cfg.rounds;
+        o.prompt = cfg.prompt; o.promptVer = PERSONA_VER;
+      }
       localStorage.setItem(CFG_KEY, JSON.stringify(o));
     } catch(e){}
   }
 
   /* ==========================================================
      一、聊天資料（沿用生成器的訊息模型）
+     ----------------------------------------------------------
+     現在每一條「主前端會話」都有自己的 iMessage / 備忘錄 / 名字。
+     切換會話 = 換一個人，不會再把上一個角色的紀錄帶進新窗口。
      ========================================================== */
+  var SESSION = {
+    id: 'default', title: '', model: '',
+    aiName: '陸灼', userName: '方肴',
+    aiAvatar: '陸', userAvatar: '方',
+    aiAvatarImage: null, userAvatarImage: null
+  };
   var IM = {
     who: { in: { name: '陸灼', avatar: '陸' }, out: { name: '方肴', avatar: '方' } },
-    timeLabel: '今天 上午 9:41',
+    timeLabel: '今天',
     status: '已送達',
     typing: false,
-    badge: '2',
+    badge: '',
     wall: 'photo',
     messages: []
   };
   var miUid = 1;
+
+  function firstChar(name, fallback){
+    var s = String(name || '').trim();
+    if (!s) return fallback || '·';
+    // 取第一个「字」；emoji 也按一个字符算
+    try { return Array.from(s)[0]; } catch(e){ return s.charAt(0); }
+  }
+  function defaultSession(){
+    var si = firstChar('陸灼', '陸'), uo = firstChar('方肴', '方');
+    return { id: 'default', title: '默認會話', model: '', aiName: '陸灼', userName: '方肴',
+             aiAvatar: si, userAvatar: uo, aiAvatarImage: null, userAvatarImage: null };
+  }
+  function normalizeSession(s){
+    s = s || {};
+    var id = String(s.id || s.chatId || 'default');
+    var base = defaultSession();
+    base.id = id;
+    base.title = String(s.title || '');
+    base.model = String(s.model || '');
+    base.aiName = String(s.aiName || s.name || base.aiName);
+    base.userName = String(s.userName || base.userName);
+    base.aiAvatar = String(s.aiAvatar || firstChar(base.aiName, '他'));
+    base.userAvatar = String(s.userAvatar || firstChar(base.userName, '我'));
+    base.aiAvatarImage = s.aiAvatarImage || null;
+    base.userAvatarImage = s.userAvatarImage || null;
+    return base;
+  }
+  function readActiveSession(){
+    var RP = window.hostRP && window.hostRP();
+    if (RP && RP.session){
+      try { var s = RP.session(); if (s && (s.id || s.chatId)) return normalizeSession(s); } catch(e){}
+    }
+    try {
+      var o = JSON.parse(localStorage.getItem('lz.active.v1') || 'null');
+      if (o && (o.id || o.chatId)) return normalizeSession(o);
+    } catch(e){}
+    return defaultSession();
+  }
+  function aiName(){ return SESSION.aiName || '他'; }
+  function userName(){ return SESSION.userName || '我'; }
+  function isLuZhuoProfile(p){
+    p = p || SESSION;
+    return /(陆灼|陸灼)/.test(String(p.aiName || ''));
+  }
+  function whoFor(p){
+    return {
+      in:  { name: p.aiName || '他',   avatar: p.aiAvatar || firstChar(p.aiName, '他'), photo: p.aiAvatarImage || null },
+      out: { name: p.userName || '我', avatar: p.userAvatar || firstChar(p.userName, '我'), photo: p.userAvatarImage || null }
+    };
+  }
+  function imKey(id){ return 'lz.im.' + (id || 'default') + '.v1'; }
+  function storyKey(id){ return 'lz.phone.story.' + (id || 'default') + '.v1'; }
+  function phoneKey(id){ return 'lz.phone.' + (id || 'default') + '.v1'; }
 
   var SEED_IM = [
     { side:'in',  text:'你總算進來了。' },
@@ -4438,28 +4545,60 @@ window.hasBrain = function () {
   ];
 
   function seedIM(){
+    if (!isLuZhuoProfile(SESSION)) { IM.messages = []; return; }
     IM.messages = SEED_IM.map(function(m){
       return { id: miUid++, side: m.side, type: 'text', text: m.text };
     });
   }
 
-  function loadIM(){
-    var ok = false;
+  function loadIMFor(profile){
+    var p = normalizeSession(profile);
+    var out = {
+      who: whoFor(p),
+      timeLabel: '今天',
+      status: '已送達',
+      typing: false,
+      badge: '',
+      wall: 'photo',
+      messages: []
+    };
+    var o = null;
+    try { o = JSON.parse(localStorage.getItem(imKey(p.id)) || 'null'); } catch(e){}
+    /* 舊版全局紀錄只遷移給陸灼這一個會話，避免把別的角色也套上同一份歷史。
+       加一個遷移標記：多個陸灼會話不會各自複製一份舊紀錄。 */
+    if ((!o || !o.messages || !o.messages.length) && isLuZhuoProfile(p)) {
+      try {
+        if (!localStorage.getItem('lz.im.legacyMigrated.v1')) {
+          var legacy = JSON.parse(localStorage.getItem(IM_KEY) || 'null');
+          if (legacy && legacy.messages && legacy.messages.length) {
+            o = legacy;
+            try { localStorage.setItem(imKey(p.id), JSON.stringify({ wall: legacy.wall || 'photo', messages: legacy.messages })); } catch(e2){}
+          }
+          localStorage.setItem('lz.im.legacyMigrated.v1', '1');
+        }
+      } catch(e){}
+    }
+    if (o && Array.isArray(o.messages)) {
+      out.messages = o.messages.filter(function(m){ return m && (m.side === 'in' || m.side === 'out'); });
+      if (o.wall) out.wall = o.wall;
+      if (o.timeLabel) out.timeLabel = o.timeLabel;
+      out.messages.forEach(function(m){ if (!m.id) m.id = miUid++; });
+      miUid = Math.max.apply(null, [miUid].concat(out.messages.map(function(m){ return m.id || 0; }))) + 1;
+    }
+    if (!out.messages.length) {
+      IM = out;
+      seedIM();
+      out.messages = IM.messages;
+    }
+    // 未讀：每個會話一個紅點
     try {
-      var o = JSON.parse(localStorage.getItem(IM_KEY) || 'null');
-      if (o && o.messages && o.messages.length){
-        IM.messages = o.messages.filter(function(m){
-          return m && (m.side === 'in' || m.side === 'out');
-        });
-        if (o.wall) IM.wall = o.wall;
-        IM.messages.forEach(function(m){ if (!m.id) m.id = miUid++; });
-        miUid = Math.max.apply(null, [miUid].concat(IM.messages.map(function(m){ return m.id || 0; }))) + 1;
-        ok = IM.messages.length > 0;
-      }
+      var po = JSON.parse(localStorage.getItem(phoneKey(p.id)) || 'null');
+      out.badge = po && po.unread ? String(po.unread) : '';
     } catch(e){}
-    if (!ok) seedIM();
+    return out;
   }
-  /* 把手機這邊的對話寫給主前端：lz.phone.story.v1（主線的 system 會讀它） */
+
+  /* 把手機這邊的對話寫給主前端：lz.phone.story.<chatId>.v1（主線的 system 會讀它） */
   function syncPhoneStory() {
     try {
       var turns = IM.messages.filter(function (m) {
@@ -4467,54 +4606,18 @@ window.hasBrain = function () {
       }).map(function (m) {
         return { role: m.side === "in" ? "assistant" : "user", content: String(m.text).slice(0, 800) };
       }).slice(-40);
-      localStorage.setItem("lz.phone.story.v1", JSON.stringify({ turns: turns, ts: Date.now() }));
-    } catch (e) {}
-  }
-
-  /* 手机上的对话收尾了 → 提示回主线 */
-  function checkWrapUp() {
-    try {
-      var bar = document.getElementById("piWrap");
-      var msgs = IM.messages.filter(function (m) { return (m.type || "text") === "text" && m.text; });
-      var on = false;
-      if (msgs.length >= 2) {
-        var last = msgs[msgs.length - 1];
-        var txt = String(last.text || "").trim();
-        if (last.side === "in" && txt.length <= 30 && !/[?？]/.test(txt) &&
-            /(晚安|睡了|睡吧|先这样|先這樣|明天见|明天見|早点睡|早點睡|我去忙|去忙|回见|回見|不聊了|晚点说|晚點說)/.test(txt)) on = true;
-      }
-      if (!bar) {
-        var css = document.createElement("style");
-        css.textContent = [
-          "#piWrap{position:fixed;left:50%;top:calc(58px + env(safe-area-inset-top));transform:translate(-50%,0);z-index:89;display:none;align-items:center;gap:10px;",
-          "  padding:8px 10px 8px 14px;border-radius:980px;background:rgba(28,28,30,.92);color:#fff;font:13px/1.3 -apple-system,system-ui,sans-serif;",
-          "  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:0 8px 24px rgba(0,0,0,.35);}",
-          "#piWrap.on{display:flex}",
-          "#piWrap button{border:0;border-radius:980px;height:28px;padding:0 12px;background:#0a84ff;color:#fff;font:13px inherit;}"
-        ].join("\n");
-        document.head.appendChild(css);
-        bar = document.createElement("div");
-        bar.id = "piWrap";
-        bar.innerHTML = '<span>这段收尾了</span><button type="button">回主線繼續 →</button>';
-        document.body.appendChild(bar);
-        bar.querySelector("button").addEventListener("click", function (e) {
-          e.stopPropagation();
-          try { window.parent.postMessage({ source: "lu-phone", type: "close" }, "*"); } catch (e2) {}
-          try { if (window.parent && window.parent.PhoneBridge) window.parent.PhoneBridge.close(); } catch (e3) {}
-        });
-      }
-      bar.classList.toggle("on", on);
+      localStorage.setItem(storyKey(SESSION.id), JSON.stringify({ turns: turns, ts: Date.now() }));
     } catch (e) {}
   }
 
   function saveIM(){
     try {
       syncPhoneStory();
-      checkWrapUp();
-      localStorage.setItem(IM_KEY, JSON.stringify({
+      localStorage.setItem(imKey(SESSION.id), JSON.stringify({
         wall: IM.wall,
+        timeLabel: IM.timeLabel,
         messages: IM.messages.filter(function(m){ return m.type === 'text' || m.type === 'hr' || m.type === 'airtag'; }).slice(-300)
-  }));
+      }));
     } catch(e){}
   }
 
@@ -4541,6 +4644,7 @@ window.hasBrain = function () {
     },
     /* 重新生成：只支持"他最后一条"。直接把那条气泡删掉（= 历史也没了 ✓），再用剩下的历史重新请求 */
     regen: async function (id) {
+      var regenSessionId = SESSION.id;
       var idx = -1, lastIn = -1, i;
       for (i = 0; i < IM.messages.length; i++) if (IM.messages[i].id === id) idx = i;
       for (i = IM.messages.length - 1; i >= 0; i--) {
@@ -4556,25 +4660,44 @@ window.hasBrain = function () {
       if (typeof renderChat === "function") renderChat();
       try {
         await requestChat(buildMessages(null), function (piece) {
+          if (SESSION.id !== regenSessionId) return;
           if (!live) {
             IM.typing = false;
-            live = pushMsg({ side: "in", text: piece });
+            live = pushMsg({ side: "in", text: displayReturnClean(piece) });
             full = piece;
             if (typeof renderChat === "function") renderChat();
           } else {
             full += piece;
             var el = bubbleElOf(live.id);
-            if (el) el.innerHTML = md(full);
+            if (el) el.innerHTML = md(displayReturnClean(full));
             scrollChat();
           }
         });
+        if (live && SESSION.id === regenSessionId) {
+          var sp = splitReturn(full);
+          live.text = sp.text;
+          saveIM();
+          var fe = bubbleElOf(live.id);
+          if (fe) fe.innerHTML = md(sp.text);
+          if (sp.returnText) postReturnToMain(sp.returnText);
+          bumpPhoneBadge(sp.text);
+        }
       } catch (err) {
         IM.typing = false;
+        if (SESSION.id !== regenSessionId) { if (typeof renderChat === "function") renderChat(); return "switched"; }
         pushMsg({ side: "in", text: "（重新生成失败：" + String(err && err.message || err).slice(0, 100) + "）" });
         if (typeof renderChat === "function") renderChat();
       } finally { IM.typing = false; }
       return "ok";
     }
+  };
+
+  /* 對外：主前端投來的新消息 / 清未讀 */
+  window.PhoneInbox = {
+    receive: function (o) { receiveIncoming(o, true); },
+    clearBadge: function () { clearPhoneBadge(); },
+    session: function () { return SESSION; },
+    switchSession: function (s) { applySession(s); }
   };
 
   function pushMsg(m){
@@ -4822,9 +4945,47 @@ window.hasBrain = function () {
 
   function isEmojiOnly(s){
     if (!s || /[0-9A-Za-z#*]/.test(s)) return false;
+    // 麥克風 emoji 是「語音消息」的標記，不是單純表情：不要放大成一個 48px 的 🎙
+    if (/^[\u{1F399}\u{1F3A4}]/u.test(String(s).trim())) return false;
     if (!EMOJI_RE.test(s)) return false;
     var chars = Array.from(s).filter(function(c){ return !/\s/.test(c); });
     return chars.length > 0 && chars.length <= 8;
+  }
+
+  /* 語音消息解析：
+     🎙 0:07 声音有点低，压着笑
+     🎙️ 語音：0:07 内容…
+     只要开头是 🎙，后面的可读文字一律放进气泡正文，不再只显示一个麦克风。 */
+  function parseVoiceText(text){
+    var s = String(text == null ? '' : text).trim();
+    if (!s) return null;
+    var m = s.match(/^[\u{1F399}\u{1F3A4}]\uFE0F?\s*(?:語音|语音)?\s*[：:]?\s*(?:(\d{1,2}:\d{2})\s*)?([\s\S]*)$/u);
+    if (!m) return null;
+    return { dur: m[1] || '', body: String(m[2] || '').trim() };
+  }
+
+  function buildVoiceBubble(m){
+    var v = parseVoiceText(m.text || '') || { dur:'', body:'' };
+    var box = document.createElement('div');
+    box.className = 'bubble voice-bubble';
+    var head = document.createElement('div');
+    head.className = 'voice-head';
+    head.innerHTML =
+      '<span class="voice-mic" aria-hidden="true">' +
+        '<svg width="12" height="15" viewBox="0 0 20 20" fill="none">' +
+          '<rect x="7.4" y="1.6" width="5.2" height="9.4" rx="2.6" stroke="currentColor" stroke-width="1.7"/>' +
+          '<path d="M4.4 9.2a5.6 5.6 0 0 0 11.2 0M10 14.8v2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+        '</svg>' +
+      '</span>' +
+      '<span>語音</span>' +
+      (v.dur ? '<span class="voice-dur">' + escHtml(v.dur) + '</span>' : '');
+    box.appendChild(head);
+    var txt = document.createElement('div');
+    txt.className = 'voice-text' + (v.body ? '' : ' empty');
+    if (v.body) txt.innerHTML = md(v.body);
+    else txt.textContent = '語音消息（沒有文字內容）';
+    box.appendChild(txt);
+    return box;
   }
 
   function renderChat(){
@@ -4834,7 +4995,7 @@ window.hasBrain = function () {
     if (!IM.messages.length && !IM.typing){
       var empty = document.createElement('div');
       empty.className = 'empty-chat';
-      empty.innerHTML = '<span class="big">💬</span>發條訊息給陸灼。';
+      empty.innerHTML = '<span class="big">💬</span>發條訊息給' + escHtml(aiName()) + '。';
       chat.appendChild(empty);
       return;
     }
@@ -4850,21 +5011,30 @@ window.hasBrain = function () {
       var prev = IM.messages[i - 1];
       var next = IM.messages[i + 1];
       var isCard = (m.type === 'hr' || m.type === 'airtag');
-      var isEmoji = m.type === 'text' && isEmojiOnly(m.text || '');
+      var isVoice = m.side === 'in' && m.type === 'text' && !!parseVoiceText(m.text || '');
+      var isEmoji = m.type === 'text' && !isVoice && isEmojiOnly(m.text || '');
 
-      var groupStart = !prev || prev.side !== m.side || isCard || prev.type !== 'text';
-      var groupEnd = !next || next.side !== m.side || next.type !== 'text' || isCard || isEmoji;
+      var groupStart = !prev || prev.side !== m.side || isCard || prev.type !== 'text' || isVoice;
+      var groupEnd = !next || next.side !== m.side || next.type !== 'text' || isCard || isEmoji || isVoice;
 
       var row = document.createElement('div');
       row.className = 'msg ' + m.side
-    // 场景信号（📷/💗/📍/🎙/⏱ 开头）单独一种样式：灰底小卡片，不像普通对话
-    if (m.side === 'in' && (m.type || 'text') === 'text' && /^[\u{1F4F7}\u{1F497}\u{1F4CD}\u{1F399}\u{23F1}]/u.test(String(m.text || ''))) row.className += ' msg-sig';
         + (groupStart ? ' gs' : '')
         + ((groupEnd && !isEmoji) ? ' ge' : '');
+      // 场景信号（📷/💗/📍/⏱ 开头）单独一种样式：灰底小卡片，不像普通对话。
+      // 🎙 现在是正式的语音气泡，不再走这个「信号」样式。
+      if (m.side === 'in' && !isVoice && (m.type || 'text') === 'text' &&
+          /^[\u{1F4F7}\u{1F497}\u{1F4CD}\u{23F1}]/u.test(String(m.text || ''))) row.className += ' msg-sig';
       row.dataset.id = m.id;
 
       if (isCard){
         row.appendChild(m.type === 'hr' ? buildHRCard(m.meta) : buildAirCard(m.meta));
+        chat.appendChild(row);
+        return;
+      }
+
+      if (isVoice){
+        row.appendChild(buildVoiceBubble(m));
         chat.appendChild(row);
         return;
       }
@@ -4911,16 +5081,78 @@ window.hasBrain = function () {
     setTimeout(scrollChat, 60);
   }
 
-  /* 頂部資訊 */
+  /* 頂部資訊 / 各個寫死「陸灼」的地方都改成當前會話的角色 */
+  function avatarHTML(info, fallback){
+    if (info && info.photo) return '<img src="' + info.photo + '" alt="">';
+    return escHtml((info && info.avatar) || fallback || '·');
+  }
+
   function renderHeader(){
-    var c = IM.who[ 'in' ];
-    $('navAvatar').textContent = c.avatar || '陸';
-    $('csAvatar').textContent = c.avatar || '陸';
-    $('navName').textContent = c.name || '陸灼';
-    $('csName').textContent = c.name || '陸灼';
-    $('ftWho').textContent = c.name || '陸灼';
+    var c = IM.who.in;
+    $('navAvatar').innerHTML = avatarHTML(c, '他');
+    $('csAvatar').innerHTML = avatarHTML(c, '他');
+    $('navName').textContent = c.name || '他';
+    $('csName').textContent = c.name || '他';
+    $('ftWho').textContent = c.name || '他';
+    var ba = $('bannerAvatar');
+    if (ba) ba.innerHTML = avatarHTML(c, '他');
+    var bt = $('bannerTitle');
+    if (bt) bt.textContent = c.name || '他';
     $('navBadgeView').textContent = IM.badge || '0';
     $('navBadgeView').style.display = IM.badge && IM.badge !== '0' ? '' : 'none';
+  }
+
+  function renderProfileTexts(){
+    var lock = $('lockDays');
+    if (lock) {
+      var sk = 'lz.session.start.' + SESSION.id;
+      var start = 0;
+      try { start = Number(localStorage.getItem(sk)) || 0; } catch(e){}
+      if (!start) { start = Date.now(); try { localStorage.setItem(sk, String(start)); } catch(e){} }
+      var days = Math.max(1, Math.floor((Date.now() - start) / 86400000) + 1);
+      lock.innerHTML = '與' + escHtml(aiName()) + '在一起的第<span class="num">' + days + '</span>天';
+    }
+    var wifi = $('wifiName'); if (wifi) wifi.textContent = aiName();
+    var foot = $('iosFoot'); if (foot) foot.textContent = 'iOS 17.2 · ' + userName() + '的 iPhone';
+    var pip = $('ftPipTag'); if (pip) pip.textContent = userName();
+    var pipBox = $('ftPip'); if (pipBox) pipBox.title = userName() + '的鏡頭';
+    var off = $('ftOffText');
+    if (off) off.textContent = isLuZhuoProfile() ? '把鏡頭打開。我想看妳。' : '把鏡頭打開。我想看看你。';
+    var mi = $('miInput'); if (mi) mi.placeholder = 'iMessage · ' + aiName();
+    try { document.title = aiName() + ' · 小手機'; } catch(e){}
+  }
+
+  /* 切換會話：整台手機換成另一個人（聊天記錄 / 備忘錄 / 名字都跟著換） */
+  function applySession(profile, opts){
+    var p = normalizeSession(profile);
+    var same = p.id === SESSION.id;
+    var oldName = SESSION.aiName;
+    SESSION = p;
+    if (same) {
+      IM.who = whoFor(p);
+      renderHeader();
+      renderProfileTexts();
+      if (window.Memo && typeof window.Memo.useSession === 'function') {
+        try { window.Memo.useSession(p.id, p); } catch(e){}
+      }
+      return;
+    }
+    lastSeenStateTs = 0;
+    lastIncomingTs = 0;
+    sending = false;          // 上一個會話的串流即使還在跑，也不能再寫進新會話
+    sendingSessionId = '';
+    IM = loadIMFor(p);
+    if (window.WebOS && WebOS.ai) WebOS.ai.im = IM;
+    renderHeader();
+    renderProfileTexts();
+    renderChat();
+    applyWall();
+    if (window.Memo && typeof window.Memo.useSession === 'function') {
+      try { window.Memo.useSession(p.id, p); } catch(e){}
+    }
+    if (!opts || !opts.silent) {
+      if (oldName && oldName !== p.aiName) miToast('已切換到「' + (p.aiName || '他') + '」');
+    }
   }
 
   /* 聊天頁小提示 */
@@ -5126,16 +5358,28 @@ window.hasBrain = function () {
   var ftCard  = $('ftCard');
   var ftMini  = $('ftMini');
 
-  var HANGUP_LINES = [
-    '掛斷？方肴，我們是不是很久沒好好聊聊了。',
-    '鏡頭轉一下。我想看看你那邊的環境。',
-    '妳現在的心率是 105。因為心虛，還是因為看到我？',
-    '別點那個紅色的按鈕。妳知道我脾氣不好。',
-    '不想視訊？那我們現在來聊聊那個男生的事。',
-    '妳覺得這個按鈕，是我做出來給妳用的嗎？',
-    '十分鐘。乖乖看著我，十分鐘後我就掛。',
-    '掛了這個電話，晚上回麗都公寓，我們換一種方式「視訊」。'
-  ];
+  function hangupLines(){
+    if (isLuZhuoProfile()) {
+      return [
+        '掛斷？' + userName() + '，我們是不是很久沒好好聊聊了。',
+        '鏡頭轉一下。我想看看你那邊的環境。',
+        '妳現在的心率是 105。因為心虛，還是因為看到我？',
+        '別點那個紅色的按鈕。妳知道我脾氣不好。',
+        '不想視訊？那我們現在來聊聊那個男生的事。',
+        '妳覺得這個按鈕，是我做出來給妳用的嗎？',
+        '十分鐘。乖乖看著我，十分鐘後我就掛。',
+        '掛了這個電話，晚上回麗都公寓，我們換一種方式「視訊」。'
+      ];
+    }
+    return [
+      '掛了？再聊一會。',
+      '鏡頭轉一下，我想看看你那邊。',
+      '這麼急著掛。',
+      '別點那個紅色的按鈕。',
+      '十分鐘。十分鐘後我就掛。',
+      '掛了這個電話，我們換個方式繼續。'
+    ];
+  }
 
   var ft = { open:false, min:false, muted:false, camOff:false, sec:0, timer:null, last:-1 };
 
@@ -5150,7 +5394,7 @@ window.hasBrain = function () {
     } else {
       box.textContent = p.avatar || '方';
     }
-    $('ftWho').textContent = IM.who.in.name || '陸灼';
+    $('ftWho').textContent = IM.who.in.name || aiName();
   }
 
   function ftTick(){
@@ -5204,11 +5448,12 @@ window.hasBrain = function () {
     ftCard.classList.add('shake');
     setTimeout(function(){ ftCard.classList.remove('shake'); }, 470);
 
-    var i = Math.floor(Math.random() * HANGUP_LINES.length);
-    if (HANGUP_LINES.length > 1 && i === ft.last) i = (i + 1) % HANGUP_LINES.length;
+    var lines = hangupLines();
+    var i = Math.floor(Math.random() * lines.length);
+    if (lines.length > 1 && i === ft.last) i = (i + 1) % lines.length;
     ft.last = i;
 
-    pushMsg({ side:'in', text: HANGUP_LINES[i] });
+    pushMsg({ side:'in', text: lines[i] });
     if (ft.min) restoreFT();
     renderChat();
 
@@ -5420,9 +5665,48 @@ window.hasBrain = function () {
     return ctx;
   }
 
+  /* 手機 → 主線的轉場：模型自己說「這段聊完了」，並留一句回主線後的話。
+     這兩行不會顯示在手機上，系統會把它們送回主聊天。 */
+  var RETURN_TAG = '[[回主线]]';
+  function returnRule(){
+    return '【回主線 · 可選】\n' +
+      '如果你覺得這段手機對話已經收尾、該回到主線現場繼續了（例如：該見面了、該繼續演接下來的場景、' +
+      '有些話要當面說），在回覆的最後另起兩行：\n' +
+      RETURN_TAG + '\n' +
+      '（這裡寫你回到主線後對' + userName() + '說的第一句：1-2 句，像劇情裡的對白；不要旁白、不要解釋。）\n' +
+      '這兩行不會顯示在手機上，系統會把它們送回主聊天，並自動把畫面交回主線。\n' +
+      '如果這段手機對話還沒結束，絕對不要寫這兩行。';
+  }
+
+  var RETURN_TAG_RE = /\[\[\s*(?:回主线|回主線)\s*\]\]/;
+  function splitReturn(raw){
+    var s = String(raw == null ? '' : raw);
+    var m = s.match(RETURN_TAG_RE);
+    if (!m || m.index == null) return { text: s, returnText: '' };
+    return {
+      text: s.slice(0, m.index).replace(/\s+$/, ''),
+      returnText: s.slice(m.index + m[0].length).replace(/^[ \t]*\r?\n/, '').replace(/^[ \t]+/, '').trim()
+    };
+  }
+  function displayReturnClean(raw){
+    var s = String(raw == null ? '' : raw);
+    var m = s.match(RETURN_TAG_RE);
+    if (m && m.index != null) return s.slice(0, m.index).replace(/\s+$/, '');
+    var tail = s.match(/\n?\[\[[^\n]*$/);
+    if (tail) {
+      var bit = tail[0].replace(/^\n/, '').trim();
+      if ('[[回主线]]'.indexOf(bit) === 0 || '[[回主線]]'.indexOf(bit) === 0) {
+        return s.slice(0, tail.index).replace(/\s+$/, '');
+      }
+    }
+    return s;
+  }
+
   function buildMessages(extra, rounds, extraSystem){
     var out = [];
-    var sys = (hostSystem() || cfg.prompt || '').trim();
+    /* 嵌在主前端里时，人设只认主前端当前会话的；绝不能用手机自带的「陆灼」人设兜底 */
+    var hostSys = hostSystem();
+    var sys = (EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim();
     // 手机端专属：不写旁白/动作；场景改用「手机原生信号」带出来
     if (cfg.noAct !== false) {
       sys += (sys ? '\n\n' : '') + [
@@ -5439,10 +5723,15 @@ window.hasBrain = function () {
         '  ⏱ 状态：⏱ 已读，没回',
         '这一行只写“能被手机看到的东西”，不写他的动作和内心（内心不许写）。',
         '什么时候发：情绪有起伏、想让她知道你在哪/什么状态、或者话说不出口的时候。不必每条都发。',
-        '其余场合就正常发文字。'
+        '其余场合就正常发文字。',
+        '',
+        '【语音消息】发 🎙 时，必须把能读的文字写在同一个气泡里（例如「🎙 0:07 声音有点低，压着笑」）；' +
+        '不要只发一个麦克风 emoji，也不要把内容藏起来。'
       ].join('\n');
     }
     if (extraSystem) sys = sys + extraSystem;
+    // 手机里聊完 → 让模型自己把场面带回主线，而不是让用户点「回主线」。
+    sys += (sys ? '\n\n' : '') + returnRule();
     sys = sys + bridgeContext();          // 主線前端最近幾輪 + 她現在的狀態
     if (sys) out.push({ role:'system', content: sys });
     out = out.concat(historyMessages(rounds || cfg.rounds || 20));
@@ -5450,8 +5739,12 @@ window.hasBrain = function () {
     return out;
   }
 
-  /* 走前端的脑子：直连模式就用前端的 key 直发服务商；否则打同一个服务器的 /api/stream */
+  /* 走前端的脑子：主前端提供 __RP.stream() 时直接复用它（同一个模型 / 同一把密钥 /
+     同一条直连逻辑）；只有老版本没有 stream() 时才走下面的兼容分支。 */
   async function requestViaHost(RP, messages, onDelta){
+    if (RP && typeof RP.stream === 'function') {
+      return await RP.stream(messages, onDelta, { max_tokens: 900 });
+    }
     var direct = {}; try { direct = RP.direct() || {}; } catch (e) {}
     var model = ""; try { model = RP.model() || ""; } catch (e) {}
     if (!model) model = cfg.model || DEFAULT_MODEL;
@@ -5584,15 +5877,57 @@ window.hasBrain = function () {
      ========================================================== */
   var miInput = $('miInput');
   var sending = false;
+  var sendingSessionId = '';
 
   function bubbleElOf(id){
     var row = chat.querySelector('.msg[data-id="' + id + '"]');
     return row ? row.querySelector('.bubble') : null;
   }
 
+  /* 手機裡聊完 → 把「回主線後的第一句」送回主前端。
+     主前端會把它寫成一條主動消息，然後把畫面交回主線；用戶不用自己判斷。 */
+  var returningToMain = false;
+  function postReturnToMain(text){
+    text = String(text || '').trim().slice(0, 400);
+    if (!text || returningToMain) return false;
+    if (!EMBEDDED) return false;
+    returningToMain = true;
+    try {
+      window.parent.postMessage({
+        source: 'lu-phone',
+        type: 'return',
+        chatId: SESSION.id,
+        data: { chatId: SESSION.id, text: text }
+      }, '*');
+    } catch(e){ returningToMain = false; return false; }
+    showBanner(aiName() + '回主線了');
+    setTimeout(function(){ returningToMain = false; }, 2500);
+    return true;
+  }
+
+  /* 模型沒有寫 [[回主线]] 時的兜底：只在「明顯是收尾/道別」的短句上再問一次。 */
+  function maybeAutoReturn(text){
+    if (!EMBEDDED || returningToMain) return;
+    var t = String(text || '').trim();
+    if (!t || t.length > 42 || /[?？]/.test(t)) return;
+    if (!/(晚安|睡了|睡吧|先这样|先這樣|先這樣吧|明天见|明天見|早点睡|早點睡|我去忙|去忙|回见|回見|不聊了|晚点说|晚點說|见面|見面|回家再说|回家再說|掛了|挂了)/.test(t)) return;
+    returningToMain = true;
+    var autoReturnSessionId = SESSION.id;
+    var ask = '【系統】這段手機對話已經聊完了。請以' + aiName() + '的身份，只寫一句回到主線現場後對' +
+      userName() + '說的話（直接寫台詞，不要解釋、不要旁白、不要標記）。';
+    requestChat(buildMessages([{ role:'user', content: ask }], 10), null).then(function(raw){
+      if (SESSION.id !== autoReturnSessionId) { returningToMain = false; return; }
+      var one = String(raw || '').split(/\n+/).filter(function(x){ return x.trim(); })[0] || '';
+      one = splitReturn(one).text.replace(/^[「『"']|[」』"']$/g, '').trim();
+      returningToMain = false;
+      if (one) postReturnToMain(one);
+    }).catch(function(){ returningToMain = false; });
+  }
+
   async function sendChat(text){
     text = (text || '').trim();
     if (!text || sending) return;
+    var sendSessionId = SESSION.id;
 
     pushMsg({ side:'out', text: text });
     renderChat();
@@ -5604,32 +5939,40 @@ window.hasBrain = function () {
     }
 
     sending = true;
+    sendingSessionId = sendSessionId;
     IM.typing = true;
     renderChat();
 
     var live = null, full = '';
     try {
       await requestChat(buildMessages(null), function(piece){
+        if (SESSION.id !== sendSessionId) return;   // 中途切了會話：舊回覆丟掉
         if (!live){
           IM.typing = false;
-          var m = pushMsg({ side:'in', text: piece });
+          var m = pushMsg({ side:'in', text: displayReturnClean(piece) });
           full = piece;
           renderChat();
           live = m;
         } else {
           full += piece;
           var el = bubbleElOf(live.id);
-          if (el) el.innerHTML = md(full);
+          if (el) el.innerHTML = md(displayReturnClean(full));
           scrollChat();
         }
       });
 
-      if (live){
-        live.text = full;
+      if (live && SESSION.id === sendSessionId){
+        var sp = splitReturn(full);
+        live.text = sp.text;
         saveIM();
         var fe = bubbleElOf(live.id);
-        if (fe) fe.innerHTML = md(full);
-        bumpPhoneBadge(full);
+        if (fe) fe.innerHTML = md(sp.text);
+        if (sp.returnText) {
+          postReturnToMain(sp.returnText);
+        } else {
+          maybeAutoReturn(sp.text);
+        }
+        bumpPhoneBadge(sp.text);
         setTimeout(function(){ maybeWriteMemo(); }, 4000);
       } else {
         IM.typing = false;
@@ -5638,12 +5981,16 @@ window.hasBrain = function () {
       }
     } catch(err){
       IM.typing = false;
+      if (SESSION.id !== sendSessionId) return;
       var m2 = String(err && err.message || err);
       pushMsg({ side:'in', text: m2 === 'NO_KEY' ? '（沒有 API 金鑰）' : ('（連線失敗：' + m2.slice(0, 140) + '）') });
       renderChat();
     } finally {
-      sending = false;
-      IM.typing = false;
+      if (sendingSessionId === sendSessionId) {
+        sending = false;
+        sendingSessionId = '';
+        IM.typing = false;
+      }
     }
   }
 
@@ -5670,21 +6017,29 @@ window.hasBrain = function () {
     var _ok = (typeof hasBrain === "function") ? hasBrain() : !!(cfg && cfg.key && cfg.key.trim());
     if (!_ok) return;
     if (!detail) return;
-    reportQueue.push(String(detail));
+    reportQueue.push({ text: String(detail), sid: SESSION.id });
     pumpReports();
   }
 
   function pumpReports(){
     if (reportBusy || !reportQueue.length) return;
     reportBusy = true;
-    var detail = reportQueue.shift();
+    var item = reportQueue.shift();
+    if (!item || item.sid !== SESSION.id) {
+      reportBusy = false;
+      if (reportQueue.length) setTimeout(pumpReports, 80);
+      return;
+    }
+    var detail = item.text;
 
-    var wrapped = '【系統提示：方肴剛剛進行了操作：' + detail +
-      '。請根據陸灼的人設，決定是否要主動發一條訊息或彈出視窗警告她。如果不理會，請回覆 IGNORE。】';
+    var wrapped = '【系統提示：' + userName() + '剛剛進行了操作：' + detail +
+      '。請根據' + aiName() + '的人設，決定是否要主動發一條訊息或彈出視窗警告她。如果不理會，請回覆 IGNORE。】';
 
-    var msgs = buildMessages([{ role:'user', content: wrapped }], 12, REPORT_RULE);
+    var msgs = buildMessages([{ role:'user', content: wrapped }], 12, reportRule());
+    var reportSessionId = SESSION.id;
 
     requestChat(msgs, null).then(function(text){
+      if (SESSION.id !== reportSessionId) return;
       handleReportReply(text);
     }).catch(function(){
       /* 靜默失敗：她有她的生活，AI 不回就算了 */
@@ -5724,10 +6079,12 @@ window.hasBrain = function () {
      · 只有 20% 會真的動筆，其餘直接跳過（省 token）
      · 真要寫，讓 AI 回一段 JSON，解析後塞進 Memo.addNote
      ========================================================== */
-  var GHOST_RULE = '【系統提示：請以陸灼的視角，決定是否要在方餚的備忘錄中偷偷寫下一篇觀察日記。' +
-                   '如果你想寫，請直接輸出嚴格的 JSON 格式：' +
-                   '{"action": "add_memo", "folder": "her", "title": "標題", "content": "內容"}。' +
-                   '如果不寫，請回覆【IGNORE】。】';
+  function ghostRule(){
+    return '【系統提示：請以' + aiName() + '的視角，決定是否要在' + userName() + '的備忘錄中偷偷寫下一篇觀察日記。' +
+      '如果你想寫，請直接輸出嚴格的 JSON 格式：' +
+      '{"action": "add_memo", "folder": "her", "title": "標題", "content": "內容"}。' +
+      '如果不寫，請回覆【IGNORE】。】';
+  }
   var GHOST_RATE = 0.2;
   var ghostBusy = false;
 
@@ -5749,14 +6106,17 @@ window.hasBrain = function () {
   function maybeWriteMemo(force){
     if (ghostBusy) return;
     if (!window.Memo) return;
-    if (!cfg.key || !cfg.key.trim()) return;
+    if (!hasBrain()) return;
     if (!force && Math.random() > GHOST_RATE) return;
 
     ghostBusy = true;
+    var hostSys = hostSystem();
+    var ghostSessionId = SESSION.id;
     requestChat([
-      { role: 'system', content: (cfg.prompt || '').trim() },
-      { role: 'user',   content: GHOST_RULE }
+      { role: 'system', content: (EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim() },
+      { role: 'user',   content: ghostRule() }
     ], null).then(function(raw){
+      if (SESSION.id !== ghostSessionId) return;   // 寫到一半切了會話：別把日記塞給下一個角色
       var o = ghostParse(raw);
       if (!o) return;                       // 她沒寫，或格式不對：什麼都不發生
       window.Memo.addNote(o);
@@ -5791,9 +6151,14 @@ window.hasBrain = function () {
     setCount();
     aiNote.textContent = '';
     aiNote.className = 'ai-note';
+    var hn = $('aiHostNote'), hh = $('aiHostHint');
+    if (hn) hn.style.display = EMBEDDED ? '' : 'none';
+    if (hh) hh.style.display = EMBEDDED ? '' : 'none';
+    aiSheet.classList.toggle('embedded', EMBEDDED);
   }
 
   function openPanel(){
+    EMBEDDED = !!window.hostRP();
     fillPanel();
     aiSheet.classList.add('show');
     aiSheet.setAttribute('aria-hidden', 'false');
@@ -5805,15 +6170,17 @@ window.hasBrain = function () {
   }
 
   $('aiSave').addEventListener('click', function(){
-    cfg.url    = aiUrl.value.trim() || DEFAULT_URL;
     var _na2 = $('aiNoAct'); if (_na2) cfg.noAct = !!_na2.checked;
-    cfg.key    = aiKey.value.trim();
-    cfg.model  = aiModel.value.trim() || DEFAULT_MODEL;
-    cfg.rounds = Math.max(1, Math.min(60, parseInt(aiRounds.value, 10) || 20));
-    cfg.prompt = aiPrompt.value;
+    if (!EMBEDDED) {
+      cfg.url    = aiUrl.value.trim() || DEFAULT_URL;
+      cfg.key    = aiKey.value.trim();
+      cfg.model  = aiModel.value.trim() || DEFAULT_MODEL;
+      cfg.rounds = Math.max(1, Math.min(60, parseInt(aiRounds.value, 10) || 20));
+      cfg.prompt = aiPrompt.value;
+    }
     saveCfg();
     closePanel();
-    showBanner('設定已存下。');
+    showBanner(EMBEDDED ? '設定已存下（API / 人設跟隨主前端）。' : '設定已存下。');
   });
 
   aiPrompt.addEventListener('input', setCount);
@@ -5829,21 +6196,22 @@ window.hasBrain = function () {
       clearArm = setTimeout(function(){
         clearArm = null;
         clearBtn.classList.remove('armed');
-        clearBtn.textContent = '清除對話';
+        clearBtn.textContent = EMBEDDED ? '清除這段手機對話' : '清除對話';
       }, 2600);
       return;
     }
     clearTimeout(clearArm); clearArm = null;
     clearBtn.classList.remove('armed');
-    clearBtn.textContent = '清除對話';
+    clearBtn.textContent = EMBEDDED ? '清除這段手機對話' : '清除對話';
     seedIM();
     saveIM();
     renderChat();
     aiNote.className = 'ai-note ok';
-    aiNote.textContent = '對話已清空，人設保留。';
+    aiNote.textContent = '這段手機對話已清空（只影響當前會話）。';
   });
 
   $('aiTest').addEventListener('click', async function(){
+    if (EMBEDDED) return;
     var btn = this, old = btn.textContent;
     var u = endpoint(aiUrl.value), k = aiKey.value.trim(),
         m = aiModel.value.trim() || DEFAULT_MODEL;
@@ -5917,11 +6285,17 @@ window.hasBrain = function () {
      十一、啟動
      ========================================================== */
   loadCfg();
-  loadIM();
+  SESSION = readActiveSession();
+  IM = loadIMFor(SESSION);
+  if (window.WebOS && WebOS.ai) WebOS.ai.im = IM;
   renderHeader();
+  renderProfileTexts();
   renderChat();
   applyWall();
   fillWallThumbs();
+  if (window.Memo && typeof window.Memo.useSession === 'function') {
+    try { window.Memo.useSession(SESSION.id, SESSION); } catch(e){}
+  }
 
   /* ---------- 實體鍵盤（桌面測試用） ---------- */
   document.addEventListener('keydown', function(e){
@@ -5949,13 +6323,13 @@ window.hasBrain = function () {
   });
 
   /* ==========================================================
-     十二、跨視窗橋接：和主劇情前端共用 localStorage
+     十二、跨視窗橋接：和主劇情前端共用 localStorage（按會話分開）
      ----------------------------------------------------------
-     lz.story.v1   ← 主前端寫：{ turns:[{role,content}], ts }
-     lz.bridge.v1  ← 主前端寫：{ mood:'angry'|'away'|'calm', reason, ts }
-     lz.phone.v1   → 手機寫：{ unread, last, ts }，主前端據此亮小紅點
+     lz.story.<chatId>.v1   ← 主前端寫：{ turns:[{role,content}], ts }
+     lz.state.<chatId>.v1   ← 主前端寫：{ mood, reason, ts }
+     lz.role.<chatId>.v1    ← 主前端寫：她的人設
+     lz.phone.<chatId>.v1   → 手機寫：{ unread, last, ts }，主前端據此亮小紅點
      ========================================================== */
-  var K_STORY = 'lz.story.v1', K_STATE = 'lz.bridge.v1', K_PHONE = 'lz.phone.v1';
   var lastSeenStateTs = 0;
 
   function lsGet(k, def){
@@ -5964,30 +6338,31 @@ window.hasBrain = function () {
   function lsSet(k, o){
     try { localStorage.setItem(k, JSON.stringify(o)); return true; } catch(e){ return false; }
   }
+  function bkey(kind, id){ return 'lz.' + kind + '.' + (id || SESSION.id || 'default') + '.v1'; }
 
   /* 主線最近幾輪 + 她此刻的狀態，接在 system 尾巴 */
   function bridgeContext(){
     var parts = [];
-    var st = lsGet(K_STORY, null);
+    var st = lsGet(bkey('story'), null);
     var turns = (st && st.turns) || [];
     turns = turns.filter(function(t){
       return t && t.content && (t.role === 'user' || t.role === 'assistant');
     }).slice(-14);
 
     if (turns.length){
-      parts.push('【主線現場：方肴在另一邊（長篇劇情）剛剛發生的事，你已經知道，不要問她「怎麼了」】');
+      parts.push('【主線現場：' + userName() + '在另一邊（長篇劇情）剛剛發生的事，你已經知道，不要問她「怎麼了」】');
       turns.forEach(function(t){
-        parts.push((t.role === 'user' ? '方肴：' : '陸灼：') + String(t.content).slice(0, 400));
+        parts.push((t.role === 'user' ? userName() : aiName()) + '：' + String(t.content).slice(0, 400));
       });
       parts.push('（以上只是背景，不要複述，也不要說「你剛剛說」。手機上照你自己的節奏。）');
     }
 
-    var rt = lsGet('lz.role.v1', null);
+    var rt = lsGet(bkey('role'), null);
     if (rt && rt.text) {
       parts.push('【她現在的設定（以這段為準）】' + (rt.name ? '她的名字是' + rt.name + '。' : '') + '\n' + String(rt.text).slice(0, 1600));
     }
 
-    var bs = lsGet(K_STATE, null);
+    var bs = lsGet(bkey('state'), null);
     if (bs && bs.reason && bs.mood !== 'calm'){
       parts.push('【你此刻的狀態】' + String(bs.reason).slice(0, 300));
     }
@@ -5995,21 +6370,31 @@ window.hasBrain = function () {
   }
 
   /* 主線留下了狀態 → 手機上「他先開口」 */
-  var MOOD_LINES = {
-    angry: ['還敢玩手機？', '我在看著妳。', '手機放下，話說清楚。'],
-    away:  ['跑去哪了。', '人不在，訊息倒是回得快。'],
-    miss:  ['有點久沒見了。'],
-    calm:  []
-  };
+  function moodLines(){
+    if (isLuZhuoProfile()) {
+      return {
+        angry: ['還敢玩手機？', '我在看著妳。', '手機放下，話說清楚。'],
+        away:  ['跑去哪了。', '人不在，訊息倒是回得快。'],
+        miss:  ['有點久沒見了。'],
+        calm:  []
+      };
+    }
+    return {
+      angry: ['在忙？', '怎麼不回我。', '手機放下，先跟我說清楚。'],
+      away:  ['去哪了。', '人不在，訊息倒是回得快。'],
+      miss:  ['有點久沒見了。', userName() + '，在嗎。'],
+      calm:  []
+    };
+  }
 
   function applyBridgeState(force){
-    var st = lsGet(K_STATE, null);
+    var st = lsGet(bkey('state'), null);
     if (!st || !st.mood || !st.ts) return;
     if (!force && st.ts <= lastSeenStateTs) return;
     lastSeenStateTs = st.ts;
     if (st.mood === 'calm') return;
 
-    var lines = MOOD_LINES[st.mood] || [];
+    var lines = (moodLines()[st.mood] || []);
     if (!lines.length) return;
 
     var line = lines[Math.floor(Math.random() * lines.length)];
@@ -6021,49 +6406,96 @@ window.hasBrain = function () {
     if (navigator.vibrate){ try { navigator.vibrate([14, 60, 14]); } catch(e){} }
   }
 
-  /* 手機 → 主前端：攢未讀，主前端據此亮紅點 */
+  /* 手機 → 主前端：攢未讀，主前端據此亮紅點（每個會話一個） */
   function bumpPhoneBadge(text){
-    var o = lsGet(K_PHONE, { unread: 0, last: '', ts: 0 }) || {};
+    var o = lsGet(bkey('phone'), { unread: 0, last: '', ts: 0 }) || {};
     o.unread = (o.unread || 0) + 1;
     o.last = String(text || '').replace(/\s+/g, ' ').slice(0, 60);
     o.ts = Date.now();
-    lsSet(K_PHONE, o);
+    lsSet(bkey('phone'), o);
+    IM.badge = String(o.unread);
+    renderHeader();
     try {
       if (window.parent && window.parent !== window){
-        window.parent.postMessage({ source:'lu-phone', type:'unread', state:o }, '*');
+        window.parent.postMessage({ source:'lu-phone', type:'unread', chatId: SESSION.id, state:o }, '*');
       }
     } catch(e){}
   }
   function clearPhoneBadge(){
-    var o = lsGet(K_PHONE, null);
+    var o = lsGet(bkey('phone'), null);
     if (!o) return;
     o.unread = 0; o.ts = Date.now();
-    lsSet(K_PHONE, o);
+    lsSet(bkey('phone'), o);
+    IM.badge = '';
+    renderHeader();
     try {
       if (window.parent && window.parent !== window){
-        window.parent.postMessage({ source:'lu-phone', type:'unread', state:o }, '*');
+        window.parent.postMessage({ source:'lu-phone', type:'unread', chatId: SESSION.id, state:o }, '*');
       }
     } catch(e){}
   }
 
+  /* 主前端投來一條「他發到手機上的消息」 */
+  var lastIncomingTs = 0;
+  function incomingSeenKey(){ return 'lz.incomingSeen.' + SESSION.id + '.v1'; }
+  function receiveIncoming(o, skipBadge){
+    if (!o || !o.text) return;
+    var ts = Number(o.ts) || 0;
+    var seen = 0;
+    try { seen = Number(localStorage.getItem(incomingSeenKey())) || 0; } catch(e){}
+    if (ts && ts <= Math.max(lastIncomingTs, seen)) return;
+    lastIncomingTs = ts || Date.now();
+    try { localStorage.setItem(incomingSeenKey(), String(lastIncomingTs)); } catch(e){}
+    pushMsg({ side:'in', text: String(o.text), ts: lastIncomingTs });
+    renderChat();
+    showBanner(String(o.text));
+    if (!skipBadge) bumpPhoneBadge(String(o.text));
+    if (navigator.vibrate){ try { navigator.vibrate([14, 60, 14]); } catch(e){} }
+  }
+
   /* 另一個視窗改了東西 → 這裡立刻跟上 */
   window.addEventListener('storage', function(e){
-    if (e.key === K_STATE || e.key === K_PHONE || e.key === null) applyBridgeState(false);
+    if (!e.key || e.key === null){
+      applyBridgeState(false);
+      return;
+    }
+    if (e.key.indexOf('lz.state.' + SESSION.id + '.') === 0) applyBridgeState(false);
+    if (e.key.indexOf('lz.incoming.' + SESSION.id + '.') === 0) {
+      var o = lsGet(bkey('incoming'), null);
+      if (o) receiveIncoming(o, true);
+    }
+    if (e.key === 'lz.active.v1') {
+      var a = lsGet('lz.active.v1', null);
+      if (a && a.id && a.id !== SESSION.id) applySession(a);
+    }
   });
 
-  /* 同一個視窗（iframe 或 file://）走 postMessage 兜底 */
+  /* 同一個視窗（iframe 或 file://）走 postMessage */
   window.addEventListener('message', function(ev){
     var d = ev.data;
     if (!d || d.source !== 'lu-story') return;
+    if (d.type === 'session' && d.data) { applySession(d.data); return; }
+    if (d.type === 'incoming' && d.data) {
+      if (!d.chatId || d.chatId === SESSION.id) receiveIncoming(d.data, true);
+      return;
+    }
     if (d.type === 'state') applyBridgeState(true);
   });
 
+  /* 沒有收到 session 消息時（例如直接刷新手機）也跟上主前端 */
+  setInterval(function(){
+    var p = readActiveSession();
+    if (p && p.id !== SESSION.id) applySession(p);
+    else if (p && (p.aiName !== SESSION.aiName || p.userName !== SESSION.userName)) applySession(p);
+  }, 1800);
+
   window.WebOS.bridge = {
-    state: function(){ return lsGet(K_STATE, null); },
-    story: function(){ return lsGet(K_STORY, null); },
+    state: function(){ return lsGet(bkey('state'), null); },
+    story: function(){ return lsGet(bkey('story'), null); },
     applyState: function(){ applyBridgeState(true); },
     clearUnread: clearPhoneBadge,
-    context: bridgeContext
+    context: bridgeContext,
+    session: function(){ return SESSION; }
   };
 
   /* ---------- 初始化 ---------- */
@@ -6096,6 +6528,34 @@ window.hasBrain = function () {
   "use strict";
 
   /* =========================================================
+     會話：每一條主前端會話有自己的備忘錄
+     ========================================================= */
+  function readSessionMeta(){
+    try {
+      if (window.parent && window.parent !== window && window.parent.__RP && window.parent.__RP.ready) {
+        var s = window.parent.__RP.session();
+        if (s && s.id) return s;
+      }
+    } catch(e){}
+    try {
+      var o = JSON.parse(localStorage.getItem("lz.active.v1") || "null");
+      if (o && o.id) return o;
+    } catch(e){}
+    return { id: "default", aiName: "陸灼", userName: "方肴" };
+  }
+  function normalizeSessionMeta(s){
+    s = s || {};
+    return {
+      id: String(s.id || s.chatId || "default"),
+      aiName: String(s.aiName || "陸灼"),
+      userName: String(s.userName || "方肴")
+    };
+  }
+  var SESSION = normalizeSessionMeta(readSessionMeta());
+  function isLuZhuo(){ return /(陆灼|陸灼)/.test(String(SESSION.aiName || "")); }
+  function storeKeyFor(id){ return "memo_app_v7." + (id || "default"); }
+
+  /* =========================================================
      资料夹定义
      ========================================================= */
   var FOLDERS = [
@@ -6111,6 +6571,7 @@ window.hasBrain = function () {
   ];
 
   function folderName(id) {
+    if (id === "fang") return SESSION.userName || "方餚";
     for (var i = 0; i < FOLDERS.length; i++) {
       if (FOLDERS[i].id === id) return FOLDERS[i].name;
     }
@@ -7505,20 +7966,39 @@ C 從九月開始固定在週二四點。
   /* =========================================================
      存储
      ========================================================= */
-  var STORE_KEY = "memo_app_v7";
+  var STORE_KEY = storeKeyFor(SESSION.id);
 
   function loadNotes() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         var parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return JSON.parse(JSON.stringify(SEED));
+    /* 舊版只有一份全局備忘錄：只遷移給陸灼這個會話，不複製給別的角色 */
+    if (isLuZhuo()) {
+      try {
+        if (!localStorage.getItem("memo_app_v7.legacyMigrated.v1")) {
+          var legacy = localStorage.getItem("memo_app_v7");
+          if (legacy) {
+            var arr = JSON.parse(legacy);
+            if (Array.isArray(arr)) {
+              localStorage.setItem(STORE_KEY, JSON.stringify(arr));
+              localStorage.setItem("memo_app_v7.legacyMigrated.v1", "1");
+              return arr;
+            }
+          }
+          localStorage.setItem("memo_app_v7.legacyMigrated.v1", "1");
+        }
+      } catch (e) {}
+      return JSON.parse(JSON.stringify(SEED));
+    }
+    /* 別人的會話：從空白開始，避免把陸灼的備忘錄帶給下一個角色 */
+    return [];
   }
 
-  /* 把备忘录同步给主前端：lz.phone.notes.v1（主线的 system 会读它） */
+  /* 把备忘录同步给主前端：lz.phone.notes.<chatId>.v1（主线的 system 会读它） */
   function syncPhoneNotes() {
     try {
       var out = [];
@@ -7527,7 +8007,7 @@ C 從九月開始固定在週二四點。
         var body = String(n.body || "").replace(/\s+/g, " ").trim();
         out.push({ folder: n.folder || "", title: String(n.title || ""), body: body.slice(0, 220), day: n.day || "" });
       }
-      localStorage.setItem("lz.phone.notes.v1", JSON.stringify({ notes: out, ts: Date.now() }));
+      localStorage.setItem("lz.phone.notes." + SESSION.id + ".v1", JSON.stringify({ notes: out, ts: Date.now() }));
     } catch (e) {}
   }
 
@@ -7693,7 +8173,7 @@ C 從九月開始固定在週二四點。
       '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">' +
       '<path d="M3 7a2 2 0 0 1 2-2h4l1.8 2h8.2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>' +
       "<span>" + folderName(n.folder) +
-      (n.co ? '<i class="memo-co">· 陸灼</i>' : "") + "</span>";
+      (n.co ? '<i class="memo-co">· ' + String(SESSION.aiName || '').replace(/[<>&"]/g, '') + '</i>' : "") + "</span>";
 
     info.appendChild(title);
     info.appendChild(date);
@@ -7721,6 +8201,8 @@ C 從九月開始固定在週二四點。
   }
 
   function refreshCounts() {
+    var fangName = document.querySelector('.memo-frow[data-folder="fang"] .memo-fname');
+    if (fangName) fangName.textContent = SESSION.userName || '她';
     var map = { quick: 0, shared: 0, memo: 0, pass: 0, import: 0, group: 0, her: 0, fang: 0 };
     notes.forEach(function (n) {
       if (map[n.folder] !== undefined) map[n.folder]++;
@@ -7930,7 +8412,7 @@ C 從九月開始固定在週二四點。
         renderList();
         popView(viewList);
         if (window.monitorAction && (currentFolder === "her" || currentFolder === "fang")) {
-          window.monitorAction("正在查看名為「" + (currentFolder === "her" ? "她" : "方餚") + "」的備忘錄");
+          window.monitorAction("正在查看名為「" + (currentFolder === "her" ? "她" : (SESSION.userName || "她")) + "」的備忘錄");
         }
       });
     })(frows[i]);
@@ -7979,6 +8461,32 @@ C 從九月開始固定在週二四點。
      對外接口：給小手機 / 幽靈寫手用
      ========================================================= */
   window.Memo = {
+    /* 切換主前端的會話 → 換成那個角色自己的備忘錄 */
+    useSession: function (id, meta) {
+      var p = normalizeSessionMeta(meta || readSessionMeta());
+      p.id = String(id || p.id || "default");
+      if (p.id === SESSION.id && p.aiName === SESSION.aiName && p.userName === SESSION.userName) return;
+      /* 正在编辑的笔记先落盘到旧会话，再切到新角色 */
+      if (editingId) { try { saveCurrent(); } catch (e) {} }
+      SESSION = p;
+      STORE_KEY = storeKeyFor(SESSION.id);
+      notes = loadNotes();
+      currentFolder = "all";
+      picking = false;
+      picked = {};
+      editingId = null;
+      lastSaved = null;
+      try {
+        if (titleInput) titleInput.value = "";
+        if (textInput) textInput.value = "";
+        if (stampEl) stampEl.textContent = "";
+      } catch (e) {}
+      showView(viewList);
+      renderList();
+      refreshCounts();
+      syncPhoneNotes();
+    },
+    session: function () { return SESSION; },
     /* 外部跳進來：直接打開某個資料夾 */
     openFolder: function (folderId) {
       if (!folderId || !folderName(folderId)) folderId = "all";
@@ -8032,31 +8540,42 @@ C 從九月開始固定在週二四點。
   renderList();
   refreshCounts();
   showView(viewList);
+  syncPhoneNotes();
 })();
 </script>
 <script>
-/* 主前端判定"现在分开了" → 通过 lz.incoming.v1 递一条他的来信（他在主线的聊天里给她发 iMessage） */
+/* 主前端投來的新消息（按會話分開）：lz.incoming.<chatId>.v1。
+   主前端通常會直接 postMessage，這裡只做輪詢兜底。 */
 (function () {
-  var K = "lz.incoming.v1";
-  var shownTs = 0;
-  try { shownTs = Number((JSON.parse(localStorage.getItem(K) || "null") || {}).ts) || 0; } catch (e) {}
-  function check() {
-    var o = null;
-    try { o = JSON.parse(localStorage.getItem(K) || "null"); } catch (e) { return; }
-    if (!o || !o.text || !o.ts || o.ts <= shownTs) return;
-    shownTs = o.ts;
+  function activeId() {
     try {
-      if (window.PhoneIM && window.PhoneIM.push) window.PhoneIM.push(String(o.text));
-      if (typeof renderChat === "function") renderChat();
-      if (typeof saveIM === "function") saveIM();
-      if (typeof bumpPhoneBadge === "function") bumpPhoneBadge("iMessage · " + (o.name || "他"));
-      if (typeof showBanner === "function") showBanner("iMessage：" + (o.name || "他") + " 发来一条消息");
+      if (window.parent && window.parent !== window && window.parent.__RP && window.parent.__RP.ready) {
+        var s = window.parent.__RP.session();
+        if (s && s.id) return s.id;
+      }
+    } catch (e) {}
+    try {
+      var a = JSON.parse(localStorage.getItem("lz.active.v1") || "null");
+      if (a && a.id) return a.id;
+    } catch (e) {}
+    return "default";
+  }
+  function check() {
+    var id = activeId();
+    var k = "lz.incoming." + id + ".v1";
+    var o = null;
+    try { o = JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return; }
+    if (!o || !o.text || !o.ts) return;
+    try {
+      if (window.PhoneInbox && window.PhoneInbox.receive) window.PhoneInbox.receive(o);
     } catch (e) {}
   }
   check();
-  setInterval(check, 6000);
+  setInterval(check, 5000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
-  window.addEventListener("storage", function (e) { if (e.key === K || e.key === null) check(); });
+  window.addEventListener("storage", function (e) {
+    if (!e.key || e.key === null || e.key.indexOf("lz.incoming.") === 0) check();
+  });
 })();
 </script>
 <script>

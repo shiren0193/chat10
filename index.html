@@ -1715,15 +1715,17 @@ button:focus-visible,
   /* 第一层是顶部高光，做出"雾面"而不是"塑料"的质感。
      蓝的饱和度比原来低不少，但因为整体压深了，
      白字对比度反而从 4.1:1 升到 4.6:1 —— 更好读，也更不刺眼。 */
+  /* 比 Apple 的系统蓝（约 #007AFF）更深一档：和流式输出的亮蓝光标拉开距离，
+     在长对话里一眼就能找到光标；白字对比度也更高。 */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 40%),
-    linear-gradient(160deg, #2a72e0 0%, #1f6ad8 58%, #175bbf 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #1d5fbe 0%, #124b9c 58%, #0a3a80 100%);
   box-shadow:
-    0 1px 1px rgba(23, 91, 191, 0.10),
-    0 8px 18px -12px rgba(23, 91, 191, 0.50),
-    0 22px 44px -34px rgba(23, 91, 191, 0.55),
+    0 1px 1px rgba(10, 58, 128, 0.14),
+    0 8px 18px -12px rgba(10, 58, 128, 0.62),
+    0 22px 44px -34px rgba(10, 58, 128, 0.62),
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(9, 45, 110, 0.10);
+    inset 0 -1px 0 rgba(4, 28, 68, 0.14);
 }
 .msg-user ::selection { background: rgba(255, 255, 255, 0.30); }
 
@@ -1803,6 +1805,33 @@ button:focus-visible,
   font-size: 0.62rem;
   font-weight: 600;
 }
+/* 主线 → 小手机的转场提示：只是告诉用户「后面去手机看」，不算剧情内容 */
+.phone-hop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(10, 124, 255, 0.08);
+  color: #0b5fbf;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  border: 1px solid rgba(10, 124, 255, 0.16);
+}
+/* 网络/接口错误单独一行，不混进正文（否则「继续生成」会把报错也当成正文续写） */
+.turn-error {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 59, 48, 0.08);
+  border: 1px solid rgba(255, 59, 48, 0.18);
+  color: #a52a24;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
 
 /* 让「编辑 / 重新生成」并排，而不是各占一行 */
 .turn-actions {
@@ -1867,11 +1896,11 @@ button:focus-visible,
   border-bottom-right-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 40%),
-    linear-gradient(160deg, #2a72e0 0%, #1f6ad8 58%, #175bbf 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #1d5fbe 0%, #124b9c 58%, #0a3a80 100%);
   box-shadow:
-    0 8px 18px -12px rgba(23, 91, 191, 0.50),
-    0 22px 44px -34px rgba(23, 91, 191, 0.55);
+    0 8px 18px -12px rgba(10, 58, 128, 0.62),
+    0 22px 44px -34px rgba(10, 58, 128, 0.62);
 }
 .edit-area.ai-edit {
   border-radius: 22px;
@@ -3962,8 +3991,15 @@ button:focus-visible,
     gap: 8px;
   }
   .topbar .avatar, .topbar .subtitle { display: none; }
-  .model-select { max-width: 128px; font-size: 0.78rem; }
+  /* 顶栏多了一个 📱 入口：把模型选择收窄一点，保证 4 个圆形按钮 + 标题不换行 */
+  .topbar-right { gap: 6px; }
+  .model-select { max-width: 104px; font-size: 0.78rem; }
   .icon-btn { width: 40px; height: 40px; }
+  @media (max-width: 380px) {
+    .topbar-right { gap: 4px; }
+    .model-select { max-width: 82px; padding-right: 22px; font-size: 0.72rem; }
+    .icon-btn, #pbBtn { width: 36px; height: 36px; }
+  }
 
   /* 输入类控件至少 16px：低于这个值时 iOS 会在聚焦时把整页放大 */
   .chat-input { font-size: 16px; padding: 12px 16px; }
@@ -4021,7 +4057,7 @@ button:focus-visible,
     border-top: 1px solid rgba(16, 24, 40, 0.05);
   }
   .turn-user .edit-area .edit-actions {  /* 我方气泡是蓝底渐变 */
-    background: #1f6ad8;
+    background: #124b9c;
     border-top-color: rgba(255, 255, 255, 0.18);
   }
   .edit-area .edit-cancel,
@@ -4675,7 +4711,8 @@ button:focus-visible,
   let customModels = [];
   let settings = { model: 'deepseek-flash', thinking: true, effort: 'high', antiGhostwrite: true,
     // 手机直连：不经过本机服务器，浏览器直接调用模型服务商（手机上单独打开这个 html 时用）
-    phoneAuto: false,
+    // 默认开：主模型没写 [[转手机]] 时，也每 5 分钟兜底判定一次「现在是不是分开了」
+    phoneAuto: true,
     directMode: false, directKeys: { deepseek: '', kimi: '', relay: '' }, directBases: { deepseek: '', kimi: '', relay: '' }, directBase: '' };
   let serverConfig = { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash', hasKey: true, providers: [] };
   let quickPrompts = DEFAULT_QUICKS.slice();
@@ -4698,6 +4735,22 @@ button:focus-visible,
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) chats = JSON.parse(raw);
       if (!Array.isArray(chats)) chats = [];
+      /* 上次在生成中被关掉/刷新时，turn.streaming 会留在 localStorage 里变成 true。
+         这会让编辑/重新生成按钮永远不出现，也让「继续生成」失效 —— 加载时清掉。 */
+      chats.forEach(function(c) {
+        (c.renderedTurns || []).forEach(function(t) {
+          if (t && t.streaming) {
+            t.streaming = false;
+            if (String(t.assistant || '').trim() && !t.finishReason) t.finishReason = 'interrupted';
+          }
+          /* 旧数据/异常模型可能把「转手机 / 回主线」标记留在正文里：加载时清掉 */
+          if (t && t.assistant && /\[\[\s*(?:转手机|轉手機|回主线|回主線)\s*\]\]/.test(t.assistant)) {
+            const sp = splitPhoneHandoff(t.assistant);
+            t.assistant = sp.text;
+            if (sp.handoff) t.phoneHandoff = sp.handoff;
+          }
+        });
+      });
     } catch (e) {
       console.error('读取会话失败:', e);
       chats = [];
@@ -4723,14 +4776,31 @@ button:focus-visible,
 
   let storageFullWarned = false;
 
-  /* ---------- 小手机联动：让 AI 自己判定"现在分开了要不要发消息" ---------- */
-  let phoneJudgeAt = 0;
+  /* ---------- 小手机联动：手动 / 兜底判定"现在分开了要不要发消息" ----------
+     主路径是主线模型自己在回复末尾写 [[转手机]]（不额外花一次调用）；
+     这里保留一个可手动触发的判定，给「现在让他发一条」和自动兜底用。 */
+  let phoneJudgeAt = Date.now();   // 先给 5 分钟冷却：主路径是模型自己写 [[转手机]]
   const PHONE_JUDGE_PROMPT = [
-    "你在扮演一个角色。请根据下面主线的最近对话，判断此刻的剧情是不是「你们不在一起」（他不在她身边、离开、分开、各自做事）。",
+    "你在扮演一个角色。请根据下面主线的最近对话，判断此刻的剧情是不是「你们不在一起」（他不在她身边、离开、分开、各自做事），或者是不是到了一个更适合用手机短信说下一句的节点。",
     "如果是：以他的口吻给她的手机发一条 iMessage（1-2 句，口语，别解释设定、别写旁白、别加引号）。",
-    "严格只输出一行 JSON：{\"apart\":true,\"text\":\"要发的内容\"}；如果不是分开的场景，输出 {\"apart\":false}。",
+    "严格只输出一行 JSON：{\"apart\":true,\"text\":\"要发的内容\"}；如果不是，输出 {\"apart\":false}。",
     "不要输出任何别的字。"
   ].join("");
+  async function oneShotText(messages, opts) {
+    opts = opts || {};
+    const chat = getCurrentChat();
+    const model = opts.model || (chat && chat.model) || settings.model;
+    let out = "";
+    await streamRequest({
+      messages: messages,
+      model: model,
+      thinking: false,
+      max_tokens: opts.max_tokens || 240
+    }, {
+      onText: function (t) { out += t; }
+    });
+    return out;
+  }
   async function judgePhoneIncoming() {
     try {
       const chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
@@ -4741,22 +4811,7 @@ button:focus-visible,
         if (tv && tv.assistant && String(tv.assistant).trim()) msgs.push({ role: "assistant", content: String(tv.assistant) });
       });
       if (!msgs.length) return null;
-      const body = JSON.stringify({
-        model: chat.model || settings.model,
-        messages: [{ role: "system", content: PHONE_JUDGE_PROMPT }].concat(msgs),
-        thinking: false, stream: true, max_tokens: 160
-      });
-      const res = await fetch("/api/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: body });
-      if (!res.ok) return null;
-      const raw = await res.text();
-      let out = "";
-      raw.split("\n").forEach(function (line) {
-        const s = line.trim();
-        if (s.indexOf("data:") !== 0) return;
-        const d = s.slice(5).trim();
-        if (!d || d.charAt(0) !== "{") return;
-        try { const o = JSON.parse(d); if (o && o.text) out += o.text; } catch (e) {}
-      });
+      const out = await oneShotText([{ role: "system", content: PHONE_JUDGE_PROMPT }].concat(msgs), { model: chat.model, max_tokens: 180 });
       const m = out.match(/\{[\s\S]*\}/);
       if (!m) return null;
       let j = null;
@@ -4764,7 +4819,8 @@ button:focus-visible,
       if (!j || j.apart !== true || !j.text) return null;
       const text = String(j.text).trim().slice(0, 300);
       if (!text) return null;
-      localStorage.setItem("lz.incoming.v1", JSON.stringify({ text: text, name: chat.aiName || "他", ts: Date.now() }));
+      const PB = window.PhoneBridge;
+      if (PB && PB.pushIncoming) PB.pushIncoming(text, { chatId: chat.id, name: chat.aiName || "他" });
       setStatus("他的手机：刚给你发来一条", false);
       return text;
     } catch (e) { return null; }
@@ -4804,6 +4860,7 @@ button:focus-visible,
     const nowBtn = document.getElementById("spPhoneNow");
     if (nowBtn) nowBtn.addEventListener("click", async function (e) {
       e.stopPropagation();
+      if (isStreaming) { setStatus("正在生成中，等这一轮写完再判定", false); return; }
       setStatus("正在让他想一条…", true);
       const txt = await judgePhoneIncoming();
       setStatus(txt ? "他的手机：刚给你发来一条" : "判定：现在不像「分开」的场景（或没拿到内容）", false);
@@ -4820,33 +4877,110 @@ button:focus-visible,
   })();
 
   /* ---------- 手机桥接：把主线最近的对话同步给「小手机」 ---------- */
-  let phoneBridgeSig = "", phoneBridgeAt = 0;
-  function syncPhoneBridge() {
+  let phoneBridgeSig = "", phoneBridgeAt = 0, phoneBridgeChatId = "";
+  function phoneSessionProfile(chat) {
+    const ai = getChatAiInfo(chat), me = getChatUserInfo(chat);
+    return {
+      id: chat.id,
+      title: chat.title || '',
+      model: chat.model || settings.model || '',
+      aiName: ai.name || '',
+      aiAvatar: ai.avatar || '',
+      aiAvatarImage: ai.avatarImage || null,
+      userName: me.name || '',
+      userAvatar: me.avatar || '',
+      userAvatarImage: me.avatarImage || null
+    };
+  }
+  function syncPhoneBridge(force) {
     try {
       const PB = window.PhoneBridge;
-      if (!PB || typeof PB.pushHistory !== "function") return;
+      if (!PB) return;
       const chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
-      if (!chat || !Array.isArray(chat.renderedTurns) || !chat.renderedTurns.length) return;
+      if (!chat) return;
+      /* 先同步「现在是谁」：名字 / 头像 / 当前会话 id。
+         即使这个会话还没有任何对话，也要让手机立刻换成这个角色。 */
+      if (PB.setSession) PB.setSession(phoneSessionProfile(chat));
+      phoneBridgeChatId = chat.id;
+
       const msgs = [];
-      chat.renderedTurns.slice(-16).forEach(function (tv) {
+      (chat.renderedTurns || []).slice(-16).forEach(function (tv) {
         if (tv && tv.user && String(tv.user).trim()) msgs.push({ role: "user", content: String(tv.user) });
         if (tv && tv.assistant && String(tv.assistant).trim()) msgs.push({ role: "assistant", content: String(tv.assistant) });
       });
-      if (!msgs.length) return;
-      const sig = chat.id + "|" + msgs.length + "|" + msgs[msgs.length - 1].content.length + "|" + msgs[0].content.length;
-      const now = Date.now();
-      if (sig === phoneBridgeSig && now - phoneBridgeAt < 4000) return;
-      phoneBridgeSig = sig; phoneBridgeAt = now;
-      PB.pushHistory(msgs);
-      // 自动模式：分开的剧情里让他自己发消息（5 分钟最多判定一次）
-      if (settings.phoneAuto && !isStreaming && Date.now() - phoneJudgeAt > 300000) {
+      if (msgs.length && PB.pushHistory) {
+        const sig = chat.id + "|" + msgs.length + "|" + msgs[msgs.length - 1].content.length + "|" + msgs[0].content.length;
+        const now = Date.now();
+        if (force || sig !== phoneBridgeSig || now - phoneBridgeAt >= 4000) {
+          phoneBridgeSig = sig; phoneBridgeAt = now;
+          PB.pushHistory(msgs, chat.id);
+        }
+      }
+      const ur = (chat.persona && chat.persona.userRole) || "";
+      // 她的设定也同步过去；清空时也要写一次，否则手机还留着上一个会话的旧设定
+      if (PB.setRole) PB.setRole(chat.userName || "", ur, chat.id);
+      // 自动兜底：主模型没有写 [[转手机]] 时，分开的剧情里也可以让他自己发一条（5 分钟最多一次）。
+      // 正在生成的那一条不平：否则会在请求刚发出时就并行再打一次 API。
+      const lastTurn = (chat.renderedTurns || [])[(chat.renderedTurns || []).length - 1];
+      if (settings.phoneAuto && !isStreaming && !(lastTurn && lastTurn.streaming) &&
+          Date.now() - phoneJudgeAt > 300000) {
         phoneJudgeAt = Date.now();
         judgePhoneIncoming();
       }
-      const ur = (chat.persona && chat.persona.userRole) || "";
-      if (PB.setRole && String(ur).trim()) PB.setRole(chat.userName || "", ur);   // 她的设定也同步过去
     } catch (e) {}
   }
+
+  /* 主模型在回复末尾写了 [[转手机]] → 把那几行收进手机，主聊天只留正文 */
+  function deliverPhoneHandoff(chat, text) {
+    text = String(text || '').trim();
+    if (!chat || !text) return false;
+    const PB = window.PhoneBridge;
+    if (!PB || !PB.pushIncoming) return false;
+    phoneJudgeAt = Date.now();   // 已经有一条进手机了，不用兜底判定再补一条
+    PB.pushIncoming(text, { chatId: chat.id, name: chat.aiName || '他' });
+    setStatus('📱 他把接下来的话发到你手机上了', false);
+    return true;
+  }
+
+  /* 手机里聊完了 → 手机把「回主线后的第一句」发回来，这里写成一条主动消息。
+     用户不用自己判断该不该切界面：它自己会回到主线并留下这句话。 */
+  window.__onPhoneReturn = function (data) {
+    try {
+      data = data || {};
+      let text = String(data.text || '').trim();
+      /* 手机端理论上已经切掉标记；这里再兜一层，别把 [[回主线]] 写进主聊天 */
+      text = splitPhoneHandoff(text).text.trim();
+      if (!text) return false;
+      const id = data.chatId || currentChatId;
+      const chat = chats.find(function (c) { return c.id === id; });
+      if (!chat) return false;
+      if (!Array.isArray(chat.renderedTurns)) chat.renderedTurns = [];
+      /* 同一条返回只写一次（手机可能因为重试再发一遍） */
+      const last = chat.renderedTurns[chat.renderedTurns.length - 1];
+      if (last && last.phoneReturn && last.assistant === text) return true;
+      chat.renderedTurns.push({
+        id: uid(),
+        user: '',
+        assistant: text,
+        reasoning: '',
+        streaming: false,
+        time: nowTime(),
+        proactive: true,
+        phoneReturn: true
+      });
+      chat.updatedAt = Date.now();
+      phoneJudgeAt = Date.now();   // 刚从手机回来，别立刻又把他送回手机
+      saveChats();
+      if (currentChatId === chat.id) {
+        renderAll();
+        applyTopbar();
+      }
+      setStatus('📱 他从手机回到主线了', false);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 
   function saveChats() {
     try {
@@ -5644,7 +5778,8 @@ button:focus-visible,
 
   // 群聊时把一条回答拆成多个气泡；返回 null 表示"不拆"
   function groupTurnHTML(chat, turn, idx) {
-    const segs = speakerSegments(chat, turn.assistant);
+    const src = turn.streaming ? displayPhoneClean(turn.assistant) : turn.assistant;
+    const segs = speakerSegments(chat, src);
     if (!segs) return null;
     const inner = segs.map(function(s, si) {
       const last = si === segs.length - 1;
@@ -5961,6 +6096,11 @@ button:focus-visible,
     if (autoSegEl) autoSegEl.querySelectorAll('[data-phone-auto]').forEach(function (b) {
       b.classList.toggle('active', (b.dataset.phoneAuto === 'on') === !!settings.phoneAuto);
     });
+    if (spPhoneTip && (!spPhoneTip.textContent || spPhoneTip.textContent === '—')) {
+      spPhoneTip.textContent = settings.phoneAuto
+        ? '自动判定开着：主模型没写 [[转手机]] 时，每 5 分钟也会兜底判断一次「现在是不是适合发手机消息」。'
+        : '自动判定关着：只跟随主模型主动写的 [[转手机]] 转场。';
+    }
     spDirectSeg.querySelectorAll('[data-direct]').forEach(function(b) {
       b.classList.toggle('active', (b.dataset.direct === 'on') === !!settings.directMode);
     });
@@ -6714,7 +6854,8 @@ button:focus-visible,
       '我的那一侧完全由我自己输入，你只写你那一边。';
   }
 
-  function composeSystemPrompt(chat) {
+  function composeSystemPrompt(chat, opts) {
+    const o = opts || {};
     const p = getPersona(chat);
     const parts = [];
     PERSONA_FIELDS.forEach(function(f) {
@@ -6725,12 +6866,20 @@ button:focus-visible,
     // 放在固定位置是为了前缀稳定 —— 花名册不变，缓存就一直命中。
     const roster = groupRosterPrompt(chat);
     if (roster) parts.push(roster);
-    // 小手机（iMessage）里发生过的对话 → 主线这边也要知道（两边共用一份剧情）
-    const phoneStory = phoneStoryPrompt();
-    if (phoneStory) parts.push(phoneStory);
-    // 小手机备忘录里的内容（她写的）→ 主线这边也要知道
-    const phoneNotes = phoneNotesPrompt();
+    // 小手机（iMessage）里发生过的对话 → 主线这边也要知道（两边共用一份剧情）。
+    // 小手机自己请求时不需要再读一遍（它本地就有完整 history）。
+    if (!o.forPhone) {
+      const phoneStory = phoneStoryPrompt(chat);
+      if (phoneStory) parts.push(phoneStory);
+    }
+    // 小手机备忘录里的内容（她写的）→ 两边都要知道
+    const phoneNotes = phoneNotesPrompt(chat);
     if (phoneNotes) parts.push(phoneNotes);
+    // 主线 → 小手机的「转场信号」：只给主线模型，不发给小手机自己
+    if (!o.forPhone) {
+      const handoff = phoneHandoffPrompt(chat);
+      if (handoff) parts.push(handoff);
+    }
     // 不许代写"我"的言行。放在最后，位置固定 → 前缀稳定，不影响缓存。
     const ghost = antiGhostLine(chat);
     if (ghost) parts.push(ghost);
@@ -6739,10 +6888,94 @@ button:focus-visible,
       parts.join('\n\n');
   }
 
-  /* 小手机里的对话（由小手机写进 lz.phone.story.v1）→ 拼成一段给主线的他看 */
-  function phoneStoryPrompt() {
+  /* 主线 → 小手机：让模型自己判断「这一刻更适合发短信」。
+     它只在回复末尾多写两行，系统会把这两行收走，放进手机 iMessage。 */
+  const PHONE_HANDOFF_TAG = '[[转手机]]';
+  function phoneHandoffPrompt(chat) {
+    const me = (getChatUserInfo(chat).name || '').trim() || '她';
+    return '【小手机（iMessage）联动 · 可选】\n' +
+      '当剧情走到「适合改用手机短信继续」的节点时（例如：你暂时离开了' + me + '、你们分开了、夜深了、' +
+      '有些话当面说不出口、你需要她一个人看手机），在回复的最后另起两行：\n' +
+      PHONE_HANDOFF_TAG + '\n' +
+      '（这里写你发到她手机上的那条消息：1-3 句，口语，像真的在打字；不要旁白、不要加引号、不要解释。）\n' +
+      '这两行会被系统收走，只出现在她的手机 iMessage 里，不会显示在主聊天。\n' +
+      '如果不是这种节点，绝对不要写这两行。';
+  }
+
+  /* 把模型输出拆成「主线正文」+「手机短信」。标记可能被拆在多个流式片段里，
+     所以流式渲染时也要用 displayPhoneClean() 先藏掉半截标记。 */
+  const PHONE_TAG_RE = /\[\[\s*(?:转手机|轉手機)\s*\]\]/;
+  const RETURN_TAG_RE_MAIN = /\[\[\s*(?:回主线|回主線)\s*\]\]/;
+
+  function stripReturnBlockMain(s) {
+    const m = String(s || '').match(RETURN_TAG_RE_MAIN);
+    if (!m || m.index == null) return String(s || '');
+    return String(s).slice(0, m.index).replace(/\s+$/, '');
+  }
+
+  function splitPhoneHandoff(raw) {
+    const s = String(raw == null ? '' : raw);
+    const pm = s.match(PHONE_TAG_RE);
+    if (pm && pm.index != null) {
+      const before = s.slice(0, pm.index).replace(/\s+$/, '');
+      const after = s.slice(pm.index + pm[0].length)
+        .replace(/^[ \t]*\r?\n/, '')
+        .replace(/^[ \t]+/, '')
+        .trim();
+      return { text: before, handoff: after };
+    }
+    /* 防御：模型偶尔会把手机端的「回主线」标记写到主线里。它不是转手机信号，
+       只把这一段从正文里切掉，不往手机里投。 */
+    const rm = s.match(RETURN_TAG_RE_MAIN);
+    if (rm && rm.index != null) {
+      return { text: s.slice(0, rm.index).replace(/\s+$/, ''), handoff: '' };
+    }
+    return { text: s, handoff: '' };
+  }
+
+  function displayPhoneClean(raw) {
+    const s = String(raw == null ? '' : raw);
+    const m = s.match(PHONE_TAG_RE);
+    if (m && m.index != null) return s.slice(0, m.index).replace(/\s+$/, '');
+    const rm = s.match(RETURN_TAG_RE_MAIN);
+    if (rm && rm.index != null) return s.slice(0, rm.index).replace(/\s+$/, '');
+    /* 半截标记：[[转手 / [[转手机 / [[转手机] 等，藏在结尾，避免闪一下 */
+    const tail = s.match(/\n?\[\[[^\n]*$/);
+    if (tail) {
+      const bit = tail[0].replace(/^\n/, '').trim();
+      if ('[[转手机]]'.indexOf(bit) === 0 || '[[轉手機]]'.indexOf(bit) === 0 ||
+          '[[回主线]]'.indexOf(bit) === 0 || '[[回主線]]'.indexOf(bit) === 0) {
+        return s.slice(0, tail.index).replace(/\s+$/, '');
+      }
+    }
+    return s;
+  }
+
+  /* 每个会话的小手机数据必须分开读，否则切窗口就会把上一个角色的聊天/备忘录带进来 */
+  function sessionScopedJSON(kind, chatId, allowLegacy) {
+    const id = String(chatId || 'default');
     try {
-      const o = JSON.parse(localStorage.getItem("lz.phone.story.v1") || "null");
+      const raw = localStorage.getItem('lz.' + kind + '.' + id + '.v1');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    /* 旧版本全局 key 只给陆灼这一个会话兜底；别的角色不能用它，否则会串剧情 */
+    if (allowLegacy) {
+      try {
+        const legacy = localStorage.getItem('lz.' + kind + '.v1');
+        if (legacy) {
+          const o = JSON.parse(legacy);
+          if (o && o.ts) return o;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  /* 小手机里的对话（由小手机写进 lz.phone.story.<chatId>.v1）→ 拼成一段给主线的他看 */
+  function phoneStoryPrompt(chat) {
+    try {
+      const o = sessionScopedJSON('phone.story', chat && chat.id,
+        /(陆灼|陸灼)/.test(String(chat && chat.aiName || '')));
       const turns = (o && o.turns) || [];
       if (!turns.length) return "";
       const lines = turns.slice(-10).map(function (tv) {
@@ -6755,10 +6988,11 @@ button:focus-visible,
     } catch (e) { return ""; }
   }
 
-  /* 小手机备忘录（由小手机写进 lz.phone.notes.v1）→ 拼成一段给主线的他看 */
-  function phoneNotesPrompt() {
+  /* 小手机备忘录（由小手机写进 lz.phone.notes.<chatId>.v1）→ 拼成一段给主线的他看 */
+  function phoneNotesPrompt(chat) {
     try {
-      const o = JSON.parse(localStorage.getItem("lz.phone.notes.v1") || "null");
+      const o = sessionScopedJSON('phone.notes', chat && chat.id,
+        /(陆灼|陸灼)/.test(String(chat && chat.aiName || '')));
       const list = (o && o.notes) || [];
       if (!list.length) return "";
       const lines = list.slice(0, 8).map(function (n) {
@@ -6771,14 +7005,46 @@ button:focus-visible,
     } catch (e) { return ""; }
   }
 
-  /* 给小手机（iframe）用的「同一个脑子」接口：同一份人设 / 同一个模型 / 同一把密钥 */
+  /* 给小手机（iframe）用的「同一个脑子」接口：同一份人设 / 同一个模型 / 同一把密钥。
+     stream() 直接复用主前端的 streamRequest（含直连模式），小手机不再自己拼接口。 */
   window.__RP = {
     ready: true,
-    system: function () { const c = getCurrentChat(); return c ? composeSystemPrompt(c) : ""; },
+    system: function () { const c = getCurrentChat(); return c ? composeSystemPrompt(c, { forPhone: true }) : ""; },
     model: function () { const c = getCurrentChat(); return (c && c.model) || settings.model; },
     chatId: function () { const c = getCurrentChat(); return (c && c.id) || ""; },
     aiName: function () { const c = getCurrentChat(); return (c && c.aiName) || ""; },
     userName: function () { const c = getCurrentChat(); return (c && c.userName) || ""; },
+    session: function () {
+      const c = getCurrentChat();
+      if (!c) return null;
+      const ai = getChatAiInfo(c), me = getChatUserInfo(c);
+      return {
+        id: c.id,
+        title: c.title || '',
+        model: c.model || settings.model || '',
+        aiName: ai.name || '',
+        aiAvatar: ai.avatar || '',
+        aiAvatarImage: ai.avatarImage || null,
+        userName: me.name || '',
+        userAvatar: me.avatar || '',
+        userAvatarImage: me.avatarImage || null
+      };
+    },
+    stream: async function (messages, onDelta, opts) {
+      opts = opts || {};
+      const c = getCurrentChat();
+      const model = opts.model || (c && c.model) || settings.model;
+      let full = '';
+      await streamRequest({
+        messages: messages,
+        model: model,
+        thinking: !!opts.thinking,
+        max_tokens: opts.max_tokens || 800
+      }, {
+        onText: function (t) { full += t; if (onDelta) onDelta(t); }
+      });
+      return full;
+    },
     direct: function () {
       const k = settings.directKeys || {};
       return { on: !!settings.directMode, deepseek: k.deepseek || "", kimi: k.kimi || "", relay: k.relay || "", base: settings.directBase || "" };
@@ -7405,8 +7671,8 @@ button:focus-visible,
   }
 
   // 续写时补的指令：让模型接着往下写，而不是重新开始
-  const CONTINUE_HINT = '上面的回答被输出长度上限截断了。请紧接着最后一句继续往下写，' +
-    '不要重复已经写过的内容，不要重述开头，直接从断掉的地方接上。';
+  const CONTINUE_HINT = '上面的回答没有写完（可能被输出长度上限截断，也可能中途网络中断）。' +
+    '请紧接着最后一句继续往下写，不要重复已经写过的内容，不要重述开头，直接从断掉的地方接上。';
 
   // 续写要重新发一次上下文，所以用量是两段之和（缓存命中率自然变成加权平均）
   function mergeUsage(a, b) {
@@ -7431,10 +7697,44 @@ button:focus-visible,
   // 一次流式请求，把各类增量交给回调。
   // 故意不和 startStreaming 里的解析合并：那条路径还要处理中途渲染和轮次状态，动它风险大。
   async function streamRequest(reqBody, handlers, signal) {
-    const res = await fetch('/api/stream', {
+    /* 和小手机/续写/续接共用同一条请求路径：
+       关着直连就走本机 /api/stream；开着直连就浏览器直发服务商。
+       小手机通过 __RP.stream() 调到这里，所以它不需要自己再配一套接口。 */
+    const srcBody = reqBody;
+    const direct = directTarget(srcBody.model);
+    let reqUrl = '/api/stream';
+    let postBody = JSON.stringify(reqBody);
+    let reqHeaders = { 'Content-Type': 'application/json' };
+    let directPayload = false;
+
+    if (settings.directMode && direct) {
+      const m = String(srcBody.model || '');
+      const pl = { model: srcBody.model, messages: srcBody.messages, stream: true };
+      if (direct.provider === 'relay') {
+        // 中转站：只发 model / messages / stream（+ max_tokens）
+      } else if (direct.provider === 'kimi') {
+        if (/^kimi-k3/i.test(m)) {
+          if (srcBody.reasoning_effort) pl.reasoning_effort = srcBody.reasoning_effort;
+        } else {
+          pl.thinking = { type: srcBody.thinking === false ? 'disabled' : 'enabled' };
+          if (srcBody.keep_thinking && pl.thinking.type === 'enabled') pl.thinking.keep = 'all';
+        }
+        pl.stream_options = { include_usage: true };
+      } else {
+        pl.thinking = { type: srcBody.thinking === false ? 'disabled' : 'enabled' };
+        if (srcBody.thinking !== false && srcBody.reasoning_effort) pl.reasoning_effort = srcBody.reasoning_effort;
+      }
+      if (Number(srcBody.max_tokens) > 0) pl.max_tokens = Math.floor(Number(srcBody.max_tokens));
+      reqUrl = direct.baseUrl + '/chat/completions';
+      postBody = JSON.stringify(pl);
+      reqHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + direct.key };
+      directPayload = true;
+    }
+
+    const res = await fetch(reqUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody),
+      headers: reqHeaders,
+      body: postBody,
       signal: signal
     });
     if (res.status === 401) throw new Error('需要访问口令（请用带 ?t= 的地址打开一次）');
@@ -7442,6 +7742,8 @@ button:focus-visible,
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let full = '';
+    let finish = '';
     while (true) {
       const r = await reader.read();
       if (r.done) break;
@@ -7455,12 +7757,23 @@ button:focus-visible,
         if (d === '[DONE]' || !d || d.charAt(0) !== '{') continue;
         let j;
         try { j = JSON.parse(d); } catch (e) { continue; }
-        if (j.text && handlers.onText) handlers.onText(j.text);
+        if (directPayload) {
+          const ch = (j.choices && j.choices[0]) || {};
+          const dl = ch.delta || {};
+          j = {
+            text: dl.content || '',
+            reasoning: dl.reasoning_content || '',
+            usage: j.usage || null,
+            finish: ch.finish_reason || ''
+          };
+        }
+        if (j.text) { full += j.text; if (handlers.onText) handlers.onText(j.text); }
         if (j.reasoning && handlers.onReasoning) handlers.onReasoning(j.reasoning);
         if (j.usage && handlers.onUsage) handlers.onUsage(j.usage);
-        if (j.finish && handlers.onFinish) handlers.onFinish(j.finish);
+        if (j.finish) { finish = j.finish; if (handlers.onFinish) handlers.onFinish(j.finish); }
       }
     }
+    return { text: full, finish: finish };
   }
 
   // 只要正文的简化用法（剧情续接在用）
@@ -7669,7 +7982,8 @@ button:focus-visible,
       turn.versions = [{
         text: turn.assistant || '',
         reasoning: turn.reasoning || '',
-        usage: turn.usage || null
+        usage: turn.usage || null,
+        phoneHandoff: turn.phoneHandoff || ''
       }];
       turn.versionIndex = 0;
     }
@@ -7688,6 +8002,7 @@ button:focus-visible,
     turn.assistant = v.text || '';
     turn.reasoning = v.reasoning || '';
     turn.usage = v.usage || null;
+    turn.phoneHandoff = v.phoneHandoff || '';
   }
 
   // turn 上的扁平字段 → 当前版本（流式过程中每次都要写回）
@@ -7698,6 +8013,7 @@ button:focus-visible,
     v.text = turn.assistant || '';
     v.reasoning = turn.reasoning || '';
     v.usage = turn.usage || null;
+    v.phoneHandoff = turn.phoneHandoff || '';
   }
 
   function turnVersionInfo(turn) {
@@ -8263,6 +8579,7 @@ button:focus-visible,
     selectMode = false; selectedKeys = [];   // 选择是按 id 记的，换会话就清掉
     resetScrollStick();   // 换了会话就恢复成跟随底部
     scheduleProactive();  // 主动消息按当前会话重排
+    syncPhoneBridge(true); // 小手机立刻换成这一场的角色 / 剧情 / 备忘录
     promptInput.focus();
   }
 
@@ -8400,6 +8717,19 @@ button:focus-visible,
   // 抽出来是为了让"流式期间只更新这一条"和"整体重绘"共用同一套结构，避免两边渲染不一致。
   // 一条 AI 气泡的"下半部分"：操作按钮 + 时间/用量/版本行。
   // 群聊把一条回答拆成多个气泡时，只有最后一段带它 —— 所以抽出来共用。
+  function canContinueTurn(turn) {
+    return !!turn && !turn.streaming &&
+      String(turn.assistant || '').trim().length > 0 &&
+      (turn.finishReason === 'length' || turn.finishReason === 'interrupted' ||
+       turn.finishReason === 'stopped' || turn.interrupted === true);
+  }
+  function turnInterruptedLabel(turn) {
+    if (!turn || turn.streaming) return '';
+    if (turn.finishReason === 'length') return '⚠ 已截断';
+    if (canContinueTurn(turn)) return '⚠ 已中断';
+    return '';
+  }
+
   function aiTailHTML(chat, turn, idx, opts) {
     const o = opts || {};
     const disabled = isStreaming ? 'disabled' : '';
@@ -8425,21 +8755,34 @@ button:focus-visible,
     const regenBtnAi = turn.streaming ? '' :
       '<button class="regen-btn-ai" data-regen-idx="' + idx + '" ' + disabled +
       ' title="' + escapeHtml(regenTip) + '">↻ 重新生成</button>';
-    // 撞到输出上限时给一个「继续生成」：接着这条回答往下写，而不是新起一轮
-    const contBtnAi = (turn.finishReason === 'length' && !turn.streaming)
+    // 撞到输出上限、网络中断、或手动停止时都给一个「继续生成」：
+    // 接着这条回答往下写，而不是新起一轮。网络波动导致半截停住时这就是恢复入口。
+    const contBtnAi = canContinueTurn(turn)
       ? '<button class="regen-btn-ai cont-btn-ai" data-cont-idx="' + idx + '" ' + disabled +
-        ' title="上次回答撞到了输出上限，点这里接着往下写（续写在同一气泡里）">▸ 继续生成</button>'
+        ' title="' + escapeHtml(turn.finishReason === 'length'
+          ? '上次回答撞到了输出上限，点这里接着往下写（续写在同一气泡里）'
+          : '上次生成中途停住了（网络波动 / 手动停止），点这里从断掉的地方接着写') +
+        '">▸ 继续生成</button>'
       : '';
     // 「引用」放在行尾：它是后加的功能，排最后可以让电脑上原有按钮的位置一点不变
-    const aiActions = (quoteBtnAi || editBtnAi || regenBtnAi || contBtnAi)
+    const aiActions = (quoteBtnAi || editBtnAi || regenBtnAi || contBtnAi || turn.phoneHandoff || turn.errorNote)
       ? '<div class="turn-actions">' + editBtnAi + regenBtnAi + contBtnAi + quoteBtnAi + selBtnAi + '</div>'
       : '';
-    return aiActions +
+    const phoneHop = turn.phoneHandoff
+      ? '<div class="phone-hop" title="这条回复的后半段被系统放进了她的手机 iMessage，主聊天只保留正文">📱 接下来的话已经发到你的小手机</div>'
+      : '';
+    const errNote = turn.errorNote
+      ? '<div class="turn-error">' + escapeHtml(turn.errorNote) + '</div>'
+      : '';
+    return aiActions + phoneHop + errNote +
       '<div class="turn-meta">' +
       '<span class="timestamp">' + (turn.time || '') + '</span>' +
-      // 截断标记要一直可见：不然用户不知道回答被切了（截断本身是静默的）
-      (turn.finishReason === 'length' && !turn.streaming
-        ? '<span class="trunc-tag" title="这次回答撞到了输出上限，内容被截断。点下面的「继续生成」可以接着往下写。">⚠ 已截断</span>'
+      // 截断 / 中断标记要一直可见：不然用户不知道回答被切了
+      (turnInterruptedLabel(turn)
+        ? '<span class="trunc-tag" title="' + (turn.finishReason === 'length'
+            ? '这次回答撞到了输出上限，内容被截断。点下面的「继续生成」可以接着往下写。'
+            : '这次生成中途停住了。点下面的「继续生成」可以从断掉的地方接着写。') +
+          '">' + turnInterruptedLabel(turn) + '</span>'
         : '') +
       // 群聊开着、名册也非空，可这条回答里一个 @名字 都没有 → 拆不出来。
       // 不说一句的话，用户只会看到"群聊模式没生效"，完全不知道为什么。
@@ -8454,10 +8797,11 @@ button:focus-visible,
 
   function aiTurnHTML(chat, turn, idx) {
     const cursor = turn.streaming ? '<span class="cursor-blink"></span>' : '';
+    const body = turn.streaming ? displayPhoneClean(turn.assistant) : String(turn.assistant || '');
     return aiAvatarHTML(chat) +
       '<div class="msg-body">' +
       renderReasoning(turn) +
-      '<div class="msg-ai markdown-body">' + renderMarkdown(turn.assistant) + cursor + '</div>' +
+      '<div class="msg-ai markdown-body">' + renderMarkdown(body) + cursor + '</div>' +
       aiTailHTML(chat, turn, idx) +
       '</div>';
   }
@@ -8931,6 +9275,18 @@ button:focus-visible,
     const turn = chat.renderedTurns[idx];
     if (!turn || !turn.assistant) return;
 
+    // 旧版本会把「（已停止生成）」或报错直接拼进正文；续写前先清掉，
+    // 否则模型会把报错也当成剧情继续写。
+    let base = String(turn.assistant)
+      .replace(/\n*\*（已停止生成）\*\s*$/,'')
+      .replace(/\n*\[(续写失败|错误)\][\s\S]*$/,'')
+      .replace(/\s+$/,'');
+    // 旧版本/手动停止时可能把 [[转手机]] 标记也留在正文里：续写前先切掉
+    base = splitPhoneHandoff(base).text;
+    if (!base) return;
+    turn.assistant = base;
+    turn.phoneHandoff = '';
+
     const model = modelSelect.value || chat.model || settings.model;
     const wantThinking = chatThinking(chat);
     const wantEffort = chatEffort(chat);
@@ -8942,12 +9298,15 @@ button:focus-visible,
     pushHistoryMessages(messages, historyFor(chat, chat.renderedTurns.slice(0, idx)), wantKeep, chat);
     // 这一轮如果带了图，续写要一并重发（和原来那条消息保持一致）
     messages.push(userMessageFor(turn, chat));
-    const partial = { role: 'assistant', content: turn.assistant };
+    const partial = { role: 'assistant', content: base };
     if (wantKeep && turn.reasoning) partial.reasoning_content = turn.reasoning;
     messages.push(partial);
     messages.push({ role: 'user', content: CONTINUE_HINT });
 
     isStreaming = true;
+    turn.streaming = true;
+    turn.errorNote = '';
+    turn.finishReason = '';
     abortController = new AbortController();
     const ctl = abortController;
     const streamingChatId = chat.id;
@@ -8956,8 +9315,10 @@ button:focus-visible,
     sendBtn.style.display = 'none';
     stopBtn.style.display = 'flex';
     promptInput.disabled = true;
+    renderAll();
 
     let got = '';
+    let finish = '';
     try {
       await streamRequest({
         messages: messages,
@@ -8984,10 +9345,23 @@ button:focus-visible,
           if (currentChatId === streamingChatId) scheduleStreamRender(chat, idx);
         },
         onFinish: function (f) {
-          turn.finishReason = f;
+          finish = f;
         }
       }, ctl.signal);
 
+      // 续写也可能带 [[转手机]]
+      const split = splitPhoneHandoff(turn.assistant);
+      turn.assistant = split.text;
+      if (split.handoff) {
+        turn.phoneHandoff = split.handoff;
+        deliverPhoneHandoff(chat, split.handoff);
+      }
+      turn.finishReason = finish || '';
+      if (!got) {
+        turn.finishReason = 'interrupted';
+        turn.errorNote = '没有拿到续写内容。可以再点一次「继续生成」。';
+      }
+      syncVersionFromTurn(turn);
       turn.updatedAt = Date.now();
       chat.updatedAt = Date.now();
       saveChats();
@@ -8995,14 +9369,18 @@ button:focus-visible,
       else setStatus('没有拿到续写内容', false);
     } catch (e) {
       if (e.name === 'AbortError') {
+        turn.finishReason = turn.assistant ? 'stopped' : 'interrupted';
         setStatus('已停止续写', false);
       } else {
-        turn.assistant += '\n\n[续写失败] ' + e.message;
+        turn.finishReason = 'interrupted';
+        turn.errorNote = '续写失败：' + String((e && e.message) || e);
         setStatus('续写失败：' + e.message, false);
       }
+      syncVersionFromTurn(turn);
       saveChats();
     } finally {
       isStreaming = false;
+      turn.streaming = false;
       abortController = null;
       cancelStreamRender();   // 收尾：丢掉还没跑的那一帧，让整体重绘成为最终状态
       sendBtn.disabled = false;
@@ -9342,6 +9720,9 @@ button:focus-visible,
     }
 
     currentTurn.streaming = true;
+    currentTurn.errorNote = '';
+    currentTurn.finishReason = '';
+    if (isReplace) currentTurn.phoneHandoff = '';
     chat.updatedAt = Date.now();
     saveChats();
     renderChatList();
@@ -9459,7 +9840,8 @@ button:focus-visible,
             }
           }
         } catch (e2) { /* 读不到就算了 */ }
-        currentTurn.assistant = friendlyHttpError(res.status, detail);
+        currentTurn.errorNote = friendlyHttpError(res.status, detail);
+        currentTurn.finishReason = 'interrupted';
         currentTurn.streaming = false;
         saveChats();
         if (currentChatId === streamingChatId) renderAll();
@@ -9550,10 +9932,16 @@ button:focus-visible,
       if (localController.signal.aborted) {
         // 思考阶段就可能被点停止：只要产出过内容（思维链也算）就保留这一轮，
         // 否则用户刚发的问题会跟着一起消失。
-        if (currentTurn.assistant || currentTurn.reasoning) {
-          currentTurn.assistant = currentTurn.assistant
-            ? currentTurn.assistant + '\n\n*（已停止生成）*'
-            : '*（已停止生成）*';
+        if (currentTurn.assistant) {
+          // 停止时也可能已经写出了 [[转手机]] 标记：只保留正文，标记不留在主聊天里
+          const sp = splitPhoneHandoff(currentTurn.assistant);
+          currentTurn.assistant = sp.text;
+          currentTurn.phoneHandoff = '';
+          currentTurn.finishReason = 'stopped';
+          currentTurn.errorNote = '';
+        } else if (currentTurn.reasoning) {
+          currentTurn.finishReason = 'stopped';
+          currentTurn.errorNote = '已停止生成（还没开始写正文）。点「重新生成」可以重来。';
         } else if (isReplace) {
           // 就地重新生成没出任何内容：丢掉这个空版本，回到上一版，别把整轮删掉
           currentTurn.versions.pop();
@@ -9564,6 +9952,12 @@ button:focus-visible,
         }
         setStatus('已停止', false);
       } else {
+        // 正常收尾：把「[[转手机]]」后面的几行收走，只留在手机里
+        const split = splitPhoneHandoff(currentTurn.assistant);
+        currentTurn.assistant = split.text;
+        currentTurn.phoneHandoff = split.handoff || '';
+        currentTurn.errorNote = '';
+        if (split.handoff) deliverPhoneHandoff(chat, split.handoff);
         setStatus('就绪', false);
       }
 
@@ -9576,10 +9970,15 @@ button:focus-visible,
     } catch (e) {
       currentTurn.streaming = false;
       if (e.name === 'AbortError') {
-        if (currentTurn.assistant || currentTurn.reasoning) {
-          currentTurn.assistant = currentTurn.assistant
-            ? currentTurn.assistant + '\n\n*（已停止生成）*'
-            : '*（已停止生成）*';
+        if (currentTurn.assistant) {
+          const sp = splitPhoneHandoff(currentTurn.assistant);
+          currentTurn.assistant = sp.text;
+          currentTurn.phoneHandoff = '';
+          currentTurn.finishReason = 'stopped';
+          currentTurn.errorNote = '';
+        } else if (currentTurn.reasoning) {
+          currentTurn.finishReason = 'stopped';
+          currentTurn.errorNote = '已停止生成（还没开始写正文）。点「重新生成」可以重来。';
         } else if (isReplace) {
           currentTurn.versions.pop();
           currentTurn.versionIndex = currentTurn.versions.length - 1;
@@ -9589,24 +9988,28 @@ button:focus-visible,
         }
         setStatus('已停止', false);
       } else {
-        // 把浏览器的原始报错（fetch failed / network error）翻译成人能看懂的话。
-        // 这一跳是"浏览器 ↔ 本机服务器"，和上游 API 无关 —— 上游出错会走 friendlyHttpError。
+        // 网络中断 / 接口异常：正文保持干净，错误单独显示。
+        // 这样「继续生成」回传的是真正的半截正文，不会把报错也当成剧情续写。
+        const mid = splitPhoneHandoff(currentTurn.assistant);
+        currentTurn.assistant = mid.text;
+        currentTurn.phoneHandoff = '';
         const msg = String((e && e.message) || '');
         const isNet = /fetch failed|Failed to fetch|NetworkError|network error|load failed|ERR_|The Internet connection|connection was lost|socket/i.test(msg);
         const isFile = (location.protocol === 'file:');
-        const fileHint = '\n[错误] 你是**直接打开这个文件**的，所以连不到电脑上的服务 ✗\n\n' +
+        const fileHint = '你是直接打开这个文件的，所以连不到电脑上的服务。\n' +
           '两个办法（任选一个）：\n' +
-          '① 打开设置抽屉 → 「手机直连（不用电脑）」→ 开 → 在下面两个框里粘上密钥（推荐，电脑关机也能用）\n' +
-          '② 或者改用启动器打印的那个 http://… 地址来打开这个页面\n\n' +
+          '① 打开设置抽屉 →「手机直连（不用电脑）」→ 开 → 粘上密钥（推荐，电脑关机也能用）\n' +
+          '② 或者改用启动器打印的那个 http://… 地址来打开这个页面\n' +
           '（原始信息：' + msg.slice(0, 80) + '）';
-        currentTurn.assistant += (isNet && isFile && !settings.directMode)
+        currentTurn.errorNote = (isNet && isFile && !settings.directMode)
           ? fileHint
           : (isNet
-            ? '\n[错误] 连接中断 —— 和本机服务器（这台电脑上的应用）断开了。\n\n' +
-              '常见原因：① 应用被关掉或重启了 ② 电脑进入了睡眠 ③ 网络切换过（比如热点换成 WiFi）。\n\n' +
-              '已经生成的内容不会丢。等几秒，再点一次「发送」或「继续生成」就行。\n' +
+            ? '连接中断 —— 和本机服务器的连接断开了。\n' +
+              '常见原因：① 应用被关掉或重启了 ② 电脑进入了睡眠 ③ 网络切换过（比如热点换成 WiFi）。\n' +
+              '已经生成的内容不会丢。等几秒，点下面的「继续生成」接着写就行。\n' +
               '（原始信息：' + msg.slice(0, 120) + '）'
-            : '\n[错误] ' + msg);
+            : '生成中断：' + msg);
+        currentTurn.finishReason = 'interrupted';
         setStatus('连接错误', false);
       }
       trimReasoning(currentTurn);
