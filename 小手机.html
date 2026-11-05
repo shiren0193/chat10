@@ -1158,6 +1158,59 @@
   }
 #view-messages .chat::-webkit-scrollbar{ display: none; }
 #view-messages .chat > :first-child{ margin-top: auto; }
+
+  /* 聊天列表（群聊時一人一個窗口） */
+  #view-messages .thread-list{
+    position:absolute; left:0; right:0; top:54px; bottom:0; z-index:40;
+    display:none; flex-direction:column;
+    background:rgba(16, 25, 36, .72);
+    -webkit-backdrop-filter:blur(26px) saturate(150%);
+    backdrop-filter:blur(26px) saturate(150%);
+  }
+  #view-messages .thread-list.show{ display:flex; }
+  #view-messages .tl-head{
+    flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:8px 16px 10px; border-bottom:.5px solid rgba(255,255,255,.12);
+  }
+  #view-messages .tl-home{
+    border:0; background:rgba(255,255,255,.14); color:#fff;
+    font:inherit; font-size:12.5px; padding:7px 11px; border-radius:980px;
+    cursor:pointer; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  }
+  #view-messages .tl-title{ flex:1; text-align:center; font-size:17px; font-weight:700; color:#fff; letter-spacing:.3px; }
+  #view-messages .tl-count{ min-width:44px; text-align:right; font-size:12px; color:rgba(255,255,255,.62); }
+  #view-messages .tl-body{ flex:1; min-height:0; overflow-y:auto; padding:6px 12px 28px; }
+  #view-messages .tl-body::-webkit-scrollbar{ width:0; }
+  #view-messages .tl-row{
+    display:flex; align-items:center; gap:11px; width:100%;
+    padding:12px 10px; border:0; border-radius:16px; background:transparent;
+    color:#fff; text-align:left; font:inherit; cursor:pointer;
+    transition:background .15s;
+  }
+  #view-messages .tl-row.on{ background:rgba(255,255,255,.08); }
+  #view-messages .tl-row:active{ background:rgba(255,255,255,.12); }
+  #view-messages .tl-row + .tl-row{ margin-top:2px; }
+  #view-messages .tl-av{
+    width:46px; height:46px; border-radius:50%; flex:0 0 46px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg,#8fc7ff,#3e7fd0 60%,#245b9c);
+    font-size:20px; color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.16);
+  }
+  #view-messages .tl-av img{ width:100%; height:100%; object-fit:cover; display:block; }
+  #view-messages .tl-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  #view-messages .tl-name{ display:block; font-size:15.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #view-messages .tl-last{
+    display:block; margin-top:3px; font-size:12.5px; color:rgba(255,255,255,.62);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #view-messages .tl-side{ display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex:0 0 auto; }
+  #view-messages .tl-time{ font-size:10.5px; color:rgba(255,255,255,.45); }
+  #view-messages .tl-badge{
+    min-width:19px; height:19px; padding:0 6px; box-sizing:border-box;
+    border-radius:980px; background:#FF3B30; color:#fff;
+    font:600 11px/19px -apple-system,system-ui,sans-serif; text-align:center;
+  }
+  #view-messages .tl-empty{ padding:60px 20px; text-align:center; color:rgba(255,255,255,.55); font-size:13px; }
 #view-messages .time-sep{
     align-self: center;
     text-align: center;
@@ -2724,7 +2777,7 @@ window.hasBrain = function () {
 
   <!-- 導航欄 -->
   <div class="navbar">
-    <button class="nav-back" type="button" aria-label="返回" data-back>
+    <button class="nav-back" type="button" id="navBack" aria-label="返回訊息列表">
       <svg width="9" height="16" viewBox="0 0 9 16" fill="none" aria-hidden="true">
         <path d="M7.6 1.4 1.5 8l6.1 6.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -2763,6 +2816,16 @@ window.hasBrain = function () {
         </svg>
       </button>
     </div>
+  </div>
+
+  <!-- 聊天列表：點左上角箭頭進來，列出當前主線會話裡每個角色的 iMessage -->
+  <div class="thread-list" id="threadList" aria-hidden="true">
+    <div class="tl-head">
+      <button class="tl-home" type="button" id="tlHome" aria-label="回到桌面">‹ 桌面</button>
+      <div class="tl-title">訊息</div>
+      <div class="tl-count" id="tlCount"></div>
+    </div>
+    <div class="tl-body" id="tlBody"></div>
   </div>
 
   <!-- 聊天內容 -->
@@ -4504,11 +4567,25 @@ window.hasBrain = function () {
   WebOS.defineApp('messages', {
     statusTheme: 'dark',
     onOpen: function(){
+      closeThreadList();
       setTimeout(scrollChat, 140);
-      try { clearPhoneBadge(); } catch(e){}     // 她看了，主前端的小紅點就消
+      try { clearThreadUnread(IM); } catch(e){}     // 她看了当前窗口，主前端的小红点就减掉这一份
     },
-    onClose: function(){ var i = $('miInput'); if (i) i.blur(); }
+    onClose: function(){ closeThreadList(); var i = $('miInput'); if (i) i.blur(); }
   });
+
+  /* 聊天页左上角箭头 → 聊天列表；从列表的「桌面」回桌面 */
+  (function(){
+    var nav = $('navBack');
+    if (nav) nav.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (threadListIsOpen()) { closeThreadList(); return; }
+      if (THREADS.length > 1) openThreadList();
+      else closeApp();
+    });
+    var home = $('tlHome');
+    if (home) home.addEventListener('click', function(e){ e.stopPropagation(); closeApp(); });
+  })();
 
   WebOS.defineApp('notes', {
     statusTheme: 'dark',
@@ -4686,9 +4763,16 @@ window.hasBrain = function () {
     id: 'default', title: '', model: '',
     aiName: '陸灼', userName: '方肴',
     aiAvatar: '陸', userAvatar: '方',
-    aiAvatarImage: null, userAvatarImage: null
+    aiAvatarImage: null, userAvatarImage: null,
+    groupMode: false, groupMembers: []
   };
+  /* 一個主前端會話可以有多個 iMessage 窗口（群聊時一人一個）。
+     THREADS 是窗口列表，IM 永遠指向「當前打開的那一個」。 */
+  var THREADS = [];
+  var ACTIVE_THREAD_ID = 'main';
   var IM = {
+    id: 'main',
+    name: '陸灼', avatar: '陸', photo: null, persona: '',
     who: { in: { name: '陸灼', avatar: '陸' }, out: { name: '方肴', avatar: '方' } },
     timeLabel: '今天',
     status: '已送達',
@@ -4708,7 +4792,8 @@ window.hasBrain = function () {
   function defaultSession(){
     var si = firstChar('陸灼', '陸'), uo = firstChar('方肴', '方');
     return { id: 'default', title: '默認會話', model: '', aiName: '陸灼', userName: '方肴',
-             aiAvatar: si, userAvatar: uo, aiAvatarImage: null, userAvatarImage: null };
+             aiAvatar: si, userAvatar: uo, aiAvatarImage: null, userAvatarImage: null,
+             groupMode: false, groupMembers: [] };
   }
   function normalizeSession(s){
     s = s || {};
@@ -4723,6 +4808,20 @@ window.hasBrain = function () {
     base.userAvatar = String(s.userAvatar || firstChar(base.userName, '我'));
     base.aiAvatarImage = s.aiAvatarImage || null;
     base.userAvatarImage = s.userAvatarImage || null;
+    var gm = Array.isArray(s.groupMembers) ? s.groupMembers : [];
+    if (!gm.length && Array.isArray(s.members)) {
+      gm = s.members.filter(function(m) { return m && m.id !== 'main'; });
+    }
+    base.groupMembers = gm.map(function(m) {
+      return {
+        id: String(m.id || ('m:' + encodeURIComponent(String(m.name || '')))),
+        name: String(m.name || ''),
+        avatar: String(m.avatar || ''),
+        avatarImage: m.avatarImage || null,
+        persona: String(m.persona || '')
+      };
+    }).filter(function(m) { return m.name; });
+    base.groupMode = !!s.groupMode || base.groupMembers.length > 0;
     return base;
   }
   function readActiveSession(){
@@ -4748,9 +4847,58 @@ window.hasBrain = function () {
       out: { name: p.userName || '我', avatar: p.userAvatar || firstChar(p.userName, '我'), photo: p.userAvatarImage || null }
     };
   }
+  function activeName(){ return (IM && IM.name) || SESSION.aiName || '他'; }
+  function threadIdForName(name){
+    return name === SESSION.aiName ? 'main' : ('m:' + encodeURIComponent(String(name || '')));
+  }
+  function sessionMembers(p){
+    p = p || SESSION;
+    var out = [{
+      id: 'main', name: p.aiName || '他',
+      avatar: p.aiAvatar || firstChar(p.aiName, '他'),
+      avatarImage: p.aiAvatarImage || null, persona: ''
+    }];
+    (p.groupMembers || []).forEach(function(m) {
+      var name = String(m.name || '').trim();
+      if (!name) return;
+      if (out.some(function(x) { return x.name === name; })) return;
+      out.push({
+        id: String(m.id || ('m:' + encodeURIComponent(name))),
+        name: name,
+        avatar: m.avatar || firstChar(name, '他'),
+        avatarImage: m.avatarImage || null,
+        persona: String(m.persona || '')
+      });
+    });
+    return out;
+  }
+  function whoForThread(t){
+    var u = whoFor(SESSION).out;
+    return {
+      in: { name: t.name || '他', avatar: t.avatar || firstChar(t.name, '他'), photo: t.photo || null },
+      out: u
+    };
+  }
   function imKey(id){ return 'lz.im.' + (id || 'default') + '.v1'; }
+  function threadKey(id, tid){ return 'lz.im.' + (id || 'default') + '.' + (tid || 'main') + '.v1'; }
+  function threadPhoneKey(id, tid){ return 'lz.phone.' + (id || 'default') + '.' + (tid || 'main') + '.v1'; }
   function storyKey(id){ return 'lz.phone.story.' + (id || 'default') + '.v1'; }
   function phoneKey(id){ return 'lz.phone.' + (id || 'default') + '.v1'; }
+  function readMeta(id){
+    try { return JSON.parse(localStorage.getItem(imKey(id)) || 'null') || {}; } catch(e){ return {}; }
+  }
+  function saveMeta(){
+    try {
+      localStorage.setItem(imKey(SESSION.id), JSON.stringify({
+        v: 2,
+        activeThread: IM.id,
+        wall: IM.wall,
+        threads: THREADS.map(function(t) {
+          return { id: t.id, name: t.name, avatar: t.avatar, persona: t.persona || '' };
+        })
+      }));
+    } catch(e){}
+  }
 
   var SEED_IM = [
     { side:'in',  text:'你總算進來了。' },
@@ -4768,73 +4916,156 @@ window.hasBrain = function () {
     });
   }
 
-  function loadIMFor(profile){
-    var p = normalizeSession(profile);
-    var out = {
-      who: whoFor(p),
-      timeLabel: '今天',
-      status: '已送達',
-      typing: false,
-      badge: '',
-      wall: 'photo',
-      messages: []
-    };
-    var o = null;
-    try { o = JSON.parse(localStorage.getItem(imKey(p.id)) || 'null'); } catch(e){}
-    /* 舊版全局紀錄只遷移給陸灼這一個會話，避免把別的角色也套上同一份歷史。
-       加一個遷移標記：多個陸灼會話不會各自複製一份舊紀錄。 */
-    if ((!o || !o.messages || !o.messages.length) && isLuZhuoProfile(p)) {
+  function loadThreadMessages(p, tid, meta){
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem(threadKey(p.id, tid)) || 'null'); } catch(e){}
+    /* 舊版：整個會話只有一份 messages，遷到 main 窗口 */
+    if ((!raw || !raw.messages) && tid === 'main' && meta && Array.isArray(meta.messages)) {
+      raw = { wall: meta.wall || 'photo', messages: meta.messages, timeLabel: meta.timeLabel };
+    }
+    /* 更舊的全局紀錄只遷移給陸灼 main，避免複製給其他角色 */
+    if ((!raw || !raw.messages) && tid === 'main' && isLuZhuoProfile(p)) {
       try {
         if (!localStorage.getItem('lz.im.legacyMigrated.v1')) {
           var legacy = JSON.parse(localStorage.getItem(IM_KEY) || 'null');
           if (legacy && legacy.messages && legacy.messages.length) {
-            o = legacy;
-            try { localStorage.setItem(imKey(p.id), JSON.stringify({ wall: legacy.wall || 'photo', messages: legacy.messages })); } catch(e2){}
+            raw = { wall: legacy.wall || 'photo', messages: legacy.messages };
           }
           localStorage.setItem('lz.im.legacyMigrated.v1', '1');
         }
       } catch(e){}
     }
-    if (o && Array.isArray(o.messages)) {
-      out.messages = o.messages.filter(function(m){ return m && (m.side === 'in' || m.side === 'out'); });
-      if (o.wall) out.wall = o.wall;
-      if (o.timeLabel) out.timeLabel = o.timeLabel;
-      out.messages.forEach(function(m){ if (!m.id) m.id = miUid++; });
-      miUid = Math.max.apply(null, [miUid].concat(out.messages.map(function(m){ return m.id || 0; }))) + 1;
+    var msgs = (raw && Array.isArray(raw.messages)) ? raw.messages.filter(function(m) {
+      return m && (m.side === 'in' || m.side === 'out');
+    }) : [];
+    msgs.forEach(function(m) { if (!m.id) m.id = miUid++; });
+    if (msgs.length) {
+      miUid = Math.max.apply(null, [miUid].concat(msgs.map(function(m) { return m.id || 0; }))) + 1;
     }
-    if (!out.messages.length) {
-      IM = out;
-      seedIM();
-      out.messages = IM.messages;
-    }
-    // 未讀：每個會話一個紅點
-    try {
-      var po = JSON.parse(localStorage.getItem(phoneKey(p.id)) || 'null');
-      out.badge = po && po.unread ? String(po.unread) : '';
-    } catch(e){}
-    return out;
+    return {
+      messages: msgs,
+      wall: (raw && raw.wall) || (meta && meta.wall) || 'photo',
+      timeLabel: (raw && raw.timeLabel) || '今天',
+      status: (raw && raw.status) || '已送達'
+    };
   }
 
-  /* 把手機這邊的對話寫給主前端：lz.phone.story.<chatId>.v1（主線的 system 會讀它） */
+  function loadThreadsFor(profile){
+    var p = normalizeSession(profile);
+    SESSION = p;
+    var meta = readMeta(p.id);
+    var members = sessionMembers(p);
+    var persisted = Array.isArray(meta.threads) ? meta.threads : [];
+    THREADS = members.map(function(m) {
+      var saved = persisted.find(function(t) { return t && t.id === m.id; }) || {};
+      var data = loadThreadMessages(p, m.id, meta);
+      var t = {
+        id: m.id,
+        name: m.name,
+        avatar: m.avatar || firstChar(m.name, '他'),
+        photo: m.avatarImage || null,
+        persona: m.persona || saved.persona || '',
+        who: null,
+        timeLabel: data.timeLabel,
+        status: data.status,
+        typing: false,
+        badge: '',
+        wall: data.wall,
+        messages: data.messages
+      };
+      t.who = whoForThread(t);
+      // 每個窗口自己的未讀；如果沒有，退回會話匯總（兼容舊版）
+      try {
+        var po = JSON.parse(localStorage.getItem(threadPhoneKey(p.id, t.id)) || 'null');
+        if (po && po.unread) t.badge = String(po.unread);
+      } catch(e){}
+      return t;
+    });
+    if (!THREADS.length) {
+      THREADS = [{
+        id: 'main', name: p.aiName || '他', avatar: p.aiAvatar || firstChar(p.aiName, '他'),
+        photo: p.aiAvatarImage || null, persona: '', who: null,
+        timeLabel: '今天', status: '已送達', typing: false, badge: '', wall: 'photo', messages: []
+      }];
+      THREADS[0].who = whoForThread(THREADS[0]);
+    }
+    var wanted = String(meta.activeThread || '');
+    var active = THREADS.find(function(t) { return t.id === wanted; });
+    if (!active) active = THREADS[0];
+    ACTIVE_THREAD_ID = active.id;
+    IM = active;
+    // 陸灼的 main 窗口沒有紀錄時，保留原版開場白；其他角色從空白開始
+    if (!IM.messages.length && IM.id === 'main' && isLuZhuoProfile(p)) {
+      seedIM();
+    }
+    // 不在 thread 裡的舊會話未讀，算到 main 上，避免紅點消失
+    try {
+      var agg = JSON.parse(localStorage.getItem(phoneKey(p.id)) || 'null');
+      // 單人會話的舊聚合未讀可以安全地算到 main；群聊不要亂塞，
+      // 否則 bridge 的聚合紅點會被同時算到 main 和真正的目標窗口，出現兩個未讀。
+      if (agg && agg.unread && THREADS.length === 1) {
+        var sum = THREADS.reduce(function(n, t) { return n + (Number(t.badge) || 0); }, 0);
+        if (!sum) {
+          IM.badge = String(agg.unread);
+          try { localStorage.setItem(threadPhoneKey(p.id, IM.id), JSON.stringify({ unread: agg.unread, ts: Date.now() })); } catch(e){}
+        }
+      }
+    } catch(e){}
+    // 每个窗口的未读加起来 = 主前端红点
+    try { refreshSessionUnread(); } catch(e){}
+    return IM;
+  }
+
+  // 兼容旧调用名
+  function loadIMFor(profile){ return loadThreadsFor(profile); }
+
+  function saveThread(t){
+    if (!t) return;
+    try {
+      localStorage.setItem(threadKey(SESSION.id, t.id), JSON.stringify({
+        wall: t.wall,
+        timeLabel: t.timeLabel,
+        status: t.status,
+        messages: t.messages.filter(function(m){ return m.type === 'text' || m.type === 'hr' || m.type === 'airtag'; }).slice(-300)
+      }));
+    } catch(e){}
+  }
+
+  /* 把手機這邊的對話寫給主前端：lz.phone.story.<chatId>.v1（主線的 system 會讀它）
+     群聊時把每個窗口的最後幾條合併，assistant 前面帶 @角色名：，主線才知道誰說的。 */
   function syncPhoneStory() {
     try {
-      var turns = IM.messages.filter(function (m) {
-        return (m.type || "text") === "text" && m.text && String(m.text).charAt(0) !== "（";
-      }).map(function (m) {
-        return { role: m.side === "in" ? "assistant" : "user", content: String(m.text).slice(0, 800) };
-      }).slice(-40);
+      var turns = [];
+      var group = THREADS.length > 1;
+      THREADS.forEach(function(t) {
+        var arr = t.messages.filter(function(m) {
+          return (m.type || "text") === "text" && m.text && String(m.text).charAt(0) !== "（";
+        }).slice(-(group ? 8 : 40));
+        arr.forEach(function(m) {
+          var content = String(m.text).slice(0, 800);
+          if (group) content = (m.side === "in" ? ('@' + t.name + '：') : ('（对' + t.name + '）')) + content;
+          turns.push({
+            role: m.side === "in" ? "assistant" : "user",
+            content: content,
+            ts: Number(m.ts) || 0
+          });
+        });
+      });
+      if (group) {
+        turns.sort(function(a, b) { return (a.ts || 0) - (b.ts || 0); });
+        turns = turns.slice(-40);
+      }
+      turns = turns.map(function(x) { return { role: x.role, content: x.content }; });
       localStorage.setItem(storyKey(SESSION.id), JSON.stringify({ turns: turns, ts: Date.now() }));
     } catch (e) {}
   }
 
   function saveIM(){
     try {
+      if (IM) saveThread(IM);
+      saveMeta();
       syncPhoneStory();
-      localStorage.setItem(imKey(SESSION.id), JSON.stringify({
-        wall: IM.wall,
-        timeLabel: IM.timeLabel,
-        messages: IM.messages.filter(function(m){ return m.type === 'text' || m.type === 'hr' || m.type === 'airtag'; }).slice(-300)
-      }));
+      if (threadListIsOpen() && typeof renderThreadList === 'function') renderThreadList();
     } catch(e){}
   }
 
@@ -4862,6 +5093,7 @@ window.hasBrain = function () {
     /* 重新生成：只支持"他最后一条"。直接把那条气泡删掉（= 历史也没了 ✓），再用剩下的历史重新请求 */
     regen: async function (id) {
       var regenSessionId = SESSION.id;
+      var regenThreadId = IM.id;
       var idx = -1, lastIn = -1, i;
       for (i = 0; i < IM.messages.length; i++) if (IM.messages[i].id === id) idx = i;
       for (i = IM.messages.length - 1; i >= 0; i--) {
@@ -4873,11 +5105,13 @@ window.hasBrain = function () {
       if (typeof saveIM === "function") saveIM();
       if (typeof renderChat === "function") renderChat();
       var live = null, full = "";
+      sending = true;
+      sendingSessionId = regenSessionId;
       IM.typing = true;
       if (typeof renderChat === "function") renderChat();
       try {
         await requestChat(buildMessages(null), function (piece) {
-          if (SESSION.id !== regenSessionId) return;
+          if (SESSION.id !== regenSessionId || IM.id !== regenThreadId) return;
           if (!live) {
             IM.typing = false;
             live = pushMsg({ side: "in", text: displayReturnClean(piece) });
@@ -4890,21 +5124,30 @@ window.hasBrain = function () {
             scrollChat();
           }
         });
-        if (live && SESSION.id === regenSessionId) {
+        if (live && SESSION.id === regenSessionId && IM.id === regenThreadId) {
           var sp = splitReturn(full);
           live.text = sp.text;
           saveIM();
           var fe = bubbleElOf(live.id);
           if (fe) fe.innerHTML = md(sp.text);
           if (sp.returnText) postReturnToMain(sp.returnText);
-          bumpPhoneBadge(sp.text);
+          noteThreadMessage(IM, sp.text);
         }
       } catch (err) {
         IM.typing = false;
-        if (SESSION.id !== regenSessionId) { if (typeof renderChat === "function") renderChat(); return "switched"; }
+        if (SESSION.id !== regenSessionId || IM.id !== regenThreadId) {
+          if (typeof renderChat === "function") renderChat();
+          return "switched";
+        }
         pushMsg({ side: "in", text: "（重新生成失败：" + String(err && err.message || err).slice(0, 100) + "）" });
         if (typeof renderChat === "function") renderChat();
-      } finally { IM.typing = false; }
+      } finally {
+        if (sendingSessionId === regenSessionId) {
+          sending = false;
+          sendingSessionId = '';
+          IM.typing = false;
+        }
+      }
       return "ok";
     }
   };
@@ -4917,11 +5160,14 @@ window.hasBrain = function () {
     switchSession: function (s) { applySession(s); }
   };
 
-  function pushMsg(m){
+  function pushMsg(m, thread){
+    var t = thread || IM;
     m.id = miUid++;
     if (!m.type) m.type = 'text';
-    IM.messages.push(m);
-    saveIM();
+    if (!m.ts) m.ts = Date.now();
+    t.messages.push(m);
+    if (t === IM) saveIM();
+    else { saveThread(t); saveMeta(); syncPhoneStory(); }
     return m;
   }
 
@@ -5212,7 +5458,7 @@ window.hasBrain = function () {
     if (!IM.messages.length && !IM.typing){
       var empty = document.createElement('div');
       empty.className = 'empty-chat';
-      empty.innerHTML = '<span class="big">💬</span>發條訊息給' + escHtml(aiName()) + '。';
+      empty.innerHTML = '<span class="big">💬</span>發條訊息給' + escHtml(activeName()) + '。';
       chat.appendChild(empty);
       return;
     }
@@ -5298,6 +5544,110 @@ window.hasBrain = function () {
     setTimeout(scrollChat, 60);
   }
 
+  /* ---------- 聊天列表：群聊時每個角色一個 iMessage 窗口 ---------- */
+  function threadById(id){
+    for (var i = 0; i < THREADS.length; i++) if (THREADS[i].id === id) return THREADS[i];
+    return null;
+  }
+  function threadListIsOpen(){
+    var el = $('threadList');
+    return !!(el && el.classList.contains('show'));
+  }
+  function threadLastText(t){
+    for (var i = t.messages.length - 1; i >= 0; i--) {
+      var m = t.messages[i];
+      if (m.type === 'hr') return '心率警報';
+      if (m.type === 'airtag') return '位置共享';
+      if (m.text) return String(m.text).replace(/\s+/g, ' ').slice(0, 60);
+    }
+    return '還沒有訊息';
+  }
+  function threadLastTime(t){
+    for (var i = t.messages.length - 1; i >= 0; i--) {
+      if (t.messages[i].ts) {
+        try {
+          var d = new Date(t.messages[i].ts);
+          return pad(d.getHours()) + ':' + pad(d.getMinutes());
+        } catch(e){}
+      }
+    }
+    return '';
+  }
+  function renderThreadList(){
+    var body = $('tlBody');
+    if (!body) return;
+    var count = $('tlCount');
+    if (count) count.textContent = THREADS.length + ' 個窗口';
+    body.innerHTML = THREADS.map(function(t) {
+      var unread = Number(t.badge) || 0;
+      return '<button class="tl-row' + (t.id === IM.id ? ' on' : '') + '" type="button" data-thread="' + escHtml(t.id) + '">' +
+        '<span class="tl-av">' + avatarHTML({ avatar: t.avatar, photo: t.photo }, '他') + '</span>' +
+        '<span class="tl-main">' +
+          '<span class="tl-name">' + escHtml(t.name || '他') + '</span>' +
+          '<span class="tl-last">' + escHtml(threadLastText(t)) + '</span>' +
+        '</span>' +
+        '<span class="tl-side">' +
+          '<span class="tl-time">' + escHtml(threadLastTime(t)) + '</span>' +
+          (unread ? '<span class="tl-badge">' + (unread > 99 ? '99+' : unread) + '</span>' : '') +
+        '</span>' +
+      '</button>';
+    }).join('') || '<div class="tl-empty">這個會話還沒有聊天窗口</div>';
+    body.querySelectorAll('[data-thread]').forEach(function(btn) {
+      btn.addEventListener('click', function() { selectThread(btn.getAttribute('data-thread')); });
+    });
+  }
+  function openThreadList(){
+    closeDrawer();
+    try { var mi = $('miInput'); if (mi) mi.blur(); } catch(e){}
+    renderThreadList();
+    var el = $('threadList');
+    if (el) { el.classList.add('show'); el.setAttribute('aria-hidden', 'false'); }
+  }
+  function closeThreadList(){
+    var el = $('threadList');
+    if (el) { el.classList.remove('show'); el.setAttribute('aria-hidden', 'true'); }
+  }
+  function refreshSessionUnread(){
+    var total = THREADS.reduce(function(n, t) { return n + (Number(t.badge) || 0); }, 0);
+    try {
+      var o = JSON.parse(localStorage.getItem(phoneKey(SESSION.id)) || 'null') || {};
+      o.unread = total;
+      o.ts = Date.now();
+      if (!total) o.last = '';
+      localStorage.setItem(phoneKey(SESSION.id), JSON.stringify(o));
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source:'lu-phone', type:'unread', chatId: SESSION.id, state:o }, '*');
+      }
+    } catch(e){}
+  }
+  function clearThreadUnread(t){
+    if (!t) return;
+    t.badge = '';
+    try { localStorage.removeItem(threadPhoneKey(SESSION.id, t.id)); } catch(e){}
+    refreshSessionUnread();
+    renderHeader();
+    if (threadListIsOpen()) renderThreadList();
+  }
+  function selectThread(id){
+    var t = threadById(id);
+    if (!t) return;
+    if (t.id === IM.id) { clearThreadUnread(t); closeThreadList(); renderChat(); return; }
+    if (sending) { miToast('等他回完再切換窗口'); return; }
+    saveIM();
+    IM = t;
+    ACTIVE_THREAD_ID = t.id;
+    IM.who = whoForThread(IM);
+    IM.typing = false;
+    if (window.WebOS && WebOS.ai) WebOS.ai.im = IM;
+    clearThreadUnread(t);
+    closeThreadList();
+    renderHeader();
+    renderProfileTexts();
+    renderChat();
+    applyWall();
+    saveIM();
+  }
+
   /* 頂部資訊 / 各個寫死「陸灼」的地方都改成當前會話的角色 */
   function avatarHTML(info, fallback){
     if (info && info.photo) return '<img src="' + info.photo + '" alt="">';
@@ -5315,8 +5665,9 @@ window.hasBrain = function () {
     if (ba) ba.innerHTML = avatarHTML(c, '他');
     var bt = $('bannerTitle');
     if (bt) bt.textContent = c.name || '他';
-    $('navBadgeView').textContent = IM.badge || '0';
-    $('navBadgeView').style.display = IM.badge && IM.badge !== '0' ? '' : 'none';
+    var totalUnread = THREADS.reduce(function(n, t) { return n + (Number(t.badge) || 0); }, 0);
+    $('navBadgeView').textContent = totalUnread ? (totalUnread > 99 ? '99+' : String(totalUnread)) : '0';
+    $('navBadgeView').style.display = totalUnread ? '' : 'none';
   }
 
   function renderProfileTexts(){
@@ -5335,30 +5686,46 @@ window.hasBrain = function () {
     var pipBox = $('ftPip'); if (pipBox) pipBox.title = userName() + '的鏡頭';
     var off = $('ftOffText');
     if (off) off.textContent = isLuZhuoProfile() ? '把鏡頭打開。我想看妳。' : '把鏡頭打開。我想看看你。';
-    var mi = $('miInput'); if (mi) mi.placeholder = 'iMessage · ' + aiName();
-    try { document.title = aiName() + ' · 小手機'; } catch(e){}
+    var mi = $('miInput'); if (mi) mi.placeholder = 'iMessage · ' + activeName();
+    try { document.title = activeName() + ' · 小手機'; } catch(e){}
   }
 
-  /* 切換會話：整台手機換成另一個人（聊天記錄 / 備忘錄 / 名字都跟著換） */
+  function memberSignature(p){
+    return [p.id, p.aiName, p.userName].concat((p.groupMembers || []).map(function(m) {
+      return m.name + ':' + m.persona;
+    })).join('|');
+  }
+
+  /* 切換會話：整台手機換成另一組人（聊天記錄 / 備忘錄 / 名字都跟著換） */
   function applySession(profile, opts){
     var p = normalizeSession(profile);
-    var same = p.id === SESSION.id;
+    var same = p.id === SESSION.id && memberSignature(p) === memberSignature(SESSION);
     var oldName = SESSION.aiName;
-    SESSION = p;
     if (same) {
-      IM.who = whoFor(p);
+      SESSION = p;
+      // 只改了名字/头像：更新当前窗口和列表，不重载聊天记录
+      THREADS.forEach(function(t) {
+        var m = sessionMembers(p).find(function(x) { return x.id === t.id; });
+        if (m) { t.name = m.name; t.avatar = m.avatar || firstChar(m.name, '他'); t.photo = m.avatarImage || null; }
+        t.who = whoForThread(t);
+      });
+      IM = threadById(ACTIVE_THREAD_ID) || THREADS[0] || IM;
+      if (IM) IM.who = whoForThread(IM);
       renderHeader();
       renderProfileTexts();
+      if (threadListIsOpen()) renderThreadList();
       if (window.Memo && typeof window.Memo.useSession === 'function') {
         try { window.Memo.useSession(p.id, p); } catch(e){}
       }
       return;
     }
+    // 先把旧会话的当前窗口落盘，再换角色
+    try { saveIM(); } catch(e){}
     lastSeenStateTs = 0;
-    lastIncomingTs = 0;
     sending = false;          // 上一個會話的串流即使還在跑，也不能再寫進新會話
     sendingSessionId = '';
-    IM = loadIMFor(p);
+    loadThreadsFor(p);
+    closeThreadList();
     if (window.WebOS && WebOS.ai) WebOS.ai.im = IM;
     renderHeader();
     renderProfileTexts();
@@ -5369,6 +5736,7 @@ window.hasBrain = function () {
     }
     if (!opts || !opts.silent) {
       if (oldName && oldName !== p.aiName) miToast('已切換到「' + (p.aiName || '他') + '」');
+      else if (THREADS.length > 1) miToast('已切換到「' + p.aiName + '」的群聊');
     }
   }
 
@@ -5919,10 +6287,21 @@ window.hasBrain = function () {
     return s;
   }
 
+  function threadSystem(){
+    var RP = hostRP();
+    if (RP && typeof RP.memberSystem === 'function' && THREADS.length > 1) {
+      try {
+        var s = RP.memberSystem(IM.name);
+        if (s) return s;
+      } catch(e){}
+    }
+    return hostSystem();
+  }
+
   function buildMessages(extra, rounds, extraSystem){
     var out = [];
     /* 嵌在主前端里时，人设只认主前端当前会话的；绝不能用手机自带的「陆灼」人设兜底 */
-    var hostSys = hostSystem();
+    var hostSys = threadSystem();
     var sys = (EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim();
     // 手机端专属：不写旁白/动作；场景改用「手机原生信号」带出来
     if (cfg.noAct !== false) {
@@ -6114,10 +6493,10 @@ window.hasBrain = function () {
         source: 'lu-phone',
         type: 'return',
         chatId: SESSION.id,
-        data: { chatId: SESSION.id, text: text }
+        data: { chatId: SESSION.id, text: text, name: activeName(), threadName: activeName(), threadId: IM.id }
       }, '*');
     } catch(e){ returningToMain = false; return false; }
-    showBanner(aiName() + '回主線了');
+    showBanner(activeName() + '回主線了');
     setTimeout(function(){ returningToMain = false; }, 2500);
     return true;
   }
@@ -6130,10 +6509,11 @@ window.hasBrain = function () {
     if (!/(晚安|睡了|睡吧|先这样|先這樣|先這樣吧|明天见|明天見|早点睡|早點睡|我去忙|去忙|回见|回見|不聊了|晚点说|晚點說|见面|見面|回家再说|回家再說|掛了|挂了)/.test(t)) return;
     returningToMain = true;
     var autoReturnSessionId = SESSION.id;
-    var ask = '【系統】這段手機對話已經聊完了。請以' + aiName() + '的身份，只寫一句回到主線現場後對' +
+    var autoReturnThreadId = IM.id;
+    var ask = '【系統】這段手機對話已經聊完了。請以' + activeName() + '的身份，只寫一句回到主線現場後對' +
       userName() + '說的話（直接寫台詞，不要解釋、不要旁白、不要標記）。';
     requestChat(buildMessages([{ role:'user', content: ask }], 10), null).then(function(raw){
-      if (SESSION.id !== autoReturnSessionId) { returningToMain = false; return; }
+      if (SESSION.id !== autoReturnSessionId || IM.id !== autoReturnThreadId) { returningToMain = false; return; }
       var one = String(raw || '').split(/\n+/).filter(function(x){ return x.trim(); })[0] || '';
       one = splitReturn(one).text.replace(/^[「『"']|[」』"']$/g, '').trim();
       returningToMain = false;
@@ -6250,13 +6630,14 @@ window.hasBrain = function () {
     var detail = item.text;
 
     var wrapped = '【系統提示：' + userName() + '剛剛進行了操作：' + detail +
-      '。請根據' + aiName() + '的人設，決定是否要主動發一條訊息或彈出視窗警告她。如果不理會，請回覆 IGNORE。】';
+      '。請根據' + activeName() + '的人設，決定是否要主動發一條訊息或彈出視窗警告她。如果不理會，請回覆 IGNORE。】';
 
     var msgs = buildMessages([{ role:'user', content: wrapped }], 12, reportRule());
     var reportSessionId = SESSION.id;
+    var reportThreadId = IM.id;
 
     requestChat(msgs, null).then(function(text){
-      if (SESSION.id !== reportSessionId) return;
+      if (SESSION.id !== reportSessionId || IM.id !== reportThreadId) return;
       handleReportReply(text);
     }).catch(function(){
       /* 靜默失敗：她有她的生活，AI 不回就算了 */
@@ -6278,7 +6659,7 @@ window.hasBrain = function () {
       pushMsg({ side:'in', text: text });
       renderChat();
       showBanner(text);            // 頂部通知
-      bumpPhoneBadge(text);
+      noteThreadMessage(IM, text);
       if (navigator.vibrate){ try { navigator.vibrate([14, 60, 14]); } catch(e){} }
     }
     if (wantCall){
@@ -6297,7 +6678,7 @@ window.hasBrain = function () {
      · 真要寫，讓 AI 回一段 JSON，解析後塞進 Memo.addNote
      ========================================================== */
   function ghostRule(){
-    return '【系統提示：請以' + aiName() + '的視角，決定是否要在' + userName() + '的備忘錄中偷偷寫下一篇觀察日記。' +
+    return '【系統提示：請以' + activeName() + '的視角，決定是否要在' + userName() + '的備忘錄中偷偷寫下一篇觀察日記。' +
       '如果你想寫，請直接輸出嚴格的 JSON 格式：' +
       '{"action": "add_memo", "folder": "her", "title": "標題", "content": "內容"}。' +
       '如果不寫，請回覆【IGNORE】。】';
@@ -6327,13 +6708,14 @@ window.hasBrain = function () {
     if (!force && Math.random() > GHOST_RATE) return;
 
     ghostBusy = true;
-    var hostSys = hostSystem();
+    var hostSys = threadSystem();
     var ghostSessionId = SESSION.id;
+    var ghostThreadId = IM.id;
     requestChat([
       { role: 'system', content: (EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim() },
       { role: 'user',   content: ghostRule() }
     ], null).then(function(raw){
-      if (SESSION.id !== ghostSessionId) return;   // 寫到一半切了會話：別把日記塞給下一個角色
+      if (SESSION.id !== ghostSessionId || IM.id !== ghostThreadId) return;   // 寫到一半切了會話/窗口：別把日記塞給下一個角色
       var o = ghostParse(raw);
       if (!o) return;                       // 她沒寫，或格式不對：什麼都不發生
       window.Memo.addNote(o);
@@ -6572,7 +6954,9 @@ window.hasBrain = function () {
     if (turns.length){
       parts.push('【主線現場：' + userName() + '在另一邊（長篇劇情）剛剛發生的事，你已經知道，不要問她「怎麼了」】');
       turns.forEach(function(t){
-        parts.push((t.role === 'user' ? userName() : aiName()) + '：' + String(t.content).slice(0, 400));
+        var content = String(t.content).slice(0, 400);
+        if (t.role === 'user') parts.push(userName() + '：' + content);
+        else parts.push(/^@/.test(content) ? content : (aiName() + '：' + content));
       });
       parts.push('（以上只是背景，不要複述，也不要說「你剛剛說」。手機上照你自己的節奏。）');
     }
@@ -6618,58 +7002,85 @@ window.hasBrain = function () {
     if (!lines.length) return;
 
     var line = lines[Math.floor(Math.random() * lines.length)];
-    pushMsg({ side:'in', text: line });
-    renderChat();
+    var target = threadById('main') || IM;
+    pushMsg({ side:'in', text: line }, target);
+    if (target === IM) renderChat();
     setTimeout(scrollChat, 40);
     showBanner(line);
-    bumpPhoneBadge(line);
+    noteThreadMessage(target, line);
     if (navigator.vibrate){ try { navigator.vibrate([14, 60, 14]); } catch(e){} }
   }
 
-  /* 手機 → 主前端：攢未讀，主前端據此亮紅點（每個會話一個） */
-  function bumpPhoneBadge(text){
-    var o = lsGet(bkey('phone'), { unread: 0, last: '', ts: 0 }) || {};
-    o.unread = (o.unread || 0) + 1;
-    o.last = String(text || '').replace(/\s+/g, ' ').slice(0, 60);
-    o.ts = Date.now();
-    lsSet(bkey('phone'), o);
-    IM.badge = String(o.unread);
-    renderHeader();
+  /* 每個 iMessage 窗口自己的未讀；主前端的紅點拿全部窗口的總和 */
+  function addThreadUnread(t, text){
+    t = t || IM;
+    t.badge = String((Number(t.badge) || 0) + 1);
     try {
-      if (window.parent && window.parent !== window){
-        window.parent.postMessage({ source:'lu-phone', type:'unread', chatId: SESSION.id, state:o }, '*');
-      }
+      var po = JSON.parse(localStorage.getItem(threadPhoneKey(SESSION.id, t.id)) || 'null') || {};
+      po.unread = Number(t.badge) || 0;
+      po.last = String(text || '').replace(/\s+/g, ' ').slice(0, 60);
+      po.ts = Date.now();
+      localStorage.setItem(threadPhoneKey(SESSION.id, t.id), JSON.stringify(po));
     } catch(e){}
+    if (t === IM) renderHeader();
+    if (threadListIsOpen()) renderThreadList();
   }
-  function clearPhoneBadge(){
-    var o = lsGet(bkey('phone'), null);
-    if (!o) return;
-    o.unread = 0; o.ts = Date.now();
-    lsSet(bkey('phone'), o);
-    IM.badge = '';
-    renderHeader();
-    try {
-      if (window.parent && window.parent !== window){
-        window.parent.postMessage({ source:'lu-phone', type:'unread', chatId: SESSION.id, state:o }, '*');
-      }
-    } catch(e){}
+  function bumpPhoneBadge(text, t){
+    t = t || IM;
+    addThreadUnread(t, text);
+    refreshSessionUnread();
+    if (t === IM) renderHeader();
+  }
+  function noteThreadMessage(t, text){
+    t = t || IM;
+    var visible = (t === IM && curApp && curApp.getAttribute('data-app') === 'messages' && !threadListIsOpen());
+    if (visible) clearThreadUnread(t);
+    else bumpPhoneBadge(text, t);
+  }
+  function clearPhoneBadge(t){
+    clearThreadUnread(t || IM);
   }
 
-  /* 主前端投來一條「他發到手機上的消息」 */
-  var lastIncomingTs = 0;
-  function incomingSeenKey(){ return 'lz.incomingSeen.' + SESSION.id + '.v1'; }
+  /* 主前端投來一條「他發到手機上的消息」；群聊時按名字放進對應窗口 */
+  function incomingSeenKey(tid){ return 'lz.incomingSeen.' + SESSION.id + '.' + (tid || 'main') + '.v1'; }
+  function ensureThreadByName(name){
+    var n = String(name || '').trim();
+    if (!n) return IM;
+    var t = THREADS.find(function(x) { return x.name === n; });
+    if (t) return t;
+    t = {
+      id: threadIdForName(n), name: n, avatar: firstChar(n, '他'), photo: null, persona: '',
+      who: null, timeLabel: '今天', status: '已送達', typing: false, badge: '',
+      wall: IM.wall || 'photo', messages: []
+    };
+    t.who = whoForThread(t);
+    THREADS.push(t);
+    saveMeta();
+    return t;
+  }
   function receiveIncoming(o, skipBadge){
     if (!o || !o.text) return;
+    var target = threadById(o.threadId) || null;
+    if (!target && o.threadName) target = ensureThreadByName(o.threadName);
+    if (!target) target = IM;
     var ts = Number(o.ts) || 0;
     var seen = 0;
-    try { seen = Number(localStorage.getItem(incomingSeenKey())) || 0; } catch(e){}
-    if (ts && ts <= Math.max(lastIncomingTs, seen)) return;
-    lastIncomingTs = ts || Date.now();
-    try { localStorage.setItem(incomingSeenKey(), String(lastIncomingTs)); } catch(e){}
-    pushMsg({ side:'in', text: String(o.text), ts: lastIncomingTs });
-    renderChat();
-    showBanner(String(o.text));
-    if (!skipBadge) bumpPhoneBadge(String(o.text));
+    try { seen = Number(localStorage.getItem(incomingSeenKey(target.id))) || 0; } catch(e){}
+    if (ts && ts <= seen) return;
+    try { localStorage.setItem(incomingSeenKey(target.id), String(ts || Date.now())); } catch(e){}
+    target.messages.push({ id: miUid++, side: 'in', type: 'text', text: String(o.text), ts: ts || Date.now() });
+    target.who = whoForThread(target);
+    saveThread(target);
+    syncPhoneStory();
+    var visible = (target === IM && curApp && curApp.getAttribute('data-app') === 'messages' && !threadListIsOpen());
+    if (target === IM) {
+      renderChat();
+      if (visible) clearThreadUnread(target); else addThreadUnread(target, o.text);
+    } else {
+      addThreadUnread(target, o.text);
+    }
+    refreshSessionUnread();
+    showBanner((THREADS.length > 1 ? target.name + '：' : '') + String(o.text));
     if (navigator.vibrate){ try { navigator.vibrate([14, 60, 14]); } catch(e){} }
   }
 
@@ -8790,9 +9201,12 @@ C 從九月開始固定在週二四點。
     var k = "lz.incoming." + id + ".v1";
     var o = null;
     try { o = JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return; }
-    if (!o || !o.text || !o.ts) return;
+    if (!o) return;
+    var items = Array.isArray(o.items) ? o.items : (o.text ? [o] : []);
     try {
-      if (window.PhoneInbox && window.PhoneInbox.receive) window.PhoneInbox.receive(o);
+      if (window.PhoneInbox && window.PhoneInbox.receive) {
+        items.forEach(function(item) { if (item && item.text) window.PhoneInbox.receive(item); });
+      }
     } catch (e) {}
   }
   check();

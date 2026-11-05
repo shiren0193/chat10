@@ -4820,8 +4820,10 @@ button:focus-visible,
       const text = String(j.text).trim().slice(0, 300);
       if (!text) return null;
       const PB = window.PhoneBridge;
-      if (PB && PB.pushIncoming) PB.pushIncoming(text, { chatId: chat.id, name: chat.aiName || "他" });
-      setStatus("他的手机：刚给你发来一条", false);
+      const lastAi = msgs.filter(function(x) { return x.role === 'assistant'; }).slice(-1)[0];
+      const speaker = lastAtSpeaker(lastAi && lastAi.content) || chat.aiName || "他";
+      if (PB && PB.pushIncoming) PB.pushIncoming(text, { chatId: chat.id, name: speaker, threadName: speaker });
+      setStatus(speaker + "的手机：刚给你发来一条", false);
       return text;
     } catch (e) { return null; }
   }
@@ -4878,6 +4880,32 @@ button:focus-visible,
 
   /* ---------- 手机桥接：把主线最近的对话同步给「小手机」 ---------- */
   let phoneBridgeSig = "", phoneBridgeAt = 0, phoneBridgeChatId = "";
+  /* 小手机的会话列表：主角色 + 群聊里出场的每个角色，一人一个 iMessage 窗口 */
+  function phoneMemberList(chat) {
+    const ai = getChatAiInfo(chat);
+    const out = [{
+      id: 'main',
+      name: ai.name || '他',
+      avatar: ai.avatar || '',
+      avatarImage: ai.avatarImage || null,
+      persona: ''
+    }];
+    if (chat && chat.groupMode) {
+      groupMembers(chat).forEach(function(m) {
+        const name = String((m && m.name) || '').trim();
+        if (!name) return;
+        if (out.some(function(x) { return x.name === name; })) return;
+        out.push({
+          id: 'm:' + encodeURIComponent(name),
+          name: name,
+          avatar: (m && m.avatar) || '',
+          avatarImage: (m && m.avatarImage) || null,
+          persona: String((m && m.persona) || '').slice(0, 1600)
+        });
+      });
+    }
+    return out;
+  }
   function phoneSessionProfile(chat) {
     const ai = getChatAiInfo(chat), me = getChatUserInfo(chat);
     return {
@@ -4889,7 +4917,10 @@ button:focus-visible,
       aiAvatarImage: ai.avatarImage || null,
       userName: me.name || '',
       userAvatar: me.avatar || '',
-      userAvatarImage: me.avatarImage || null
+      userAvatarImage: me.avatarImage || null,
+      groupMode: !!chat.groupMode,
+      groupMembers: phoneMemberList(chat).slice(1),
+      members: phoneMemberList(chat)
     };
   }
   function syncPhoneBridge(force) {
@@ -4930,15 +4961,30 @@ button:focus-visible,
     } catch (e) {}
   }
 
-  /* 主模型在回复末尾写了 [[转手机]] → 把那几行收进手机，主聊天只留正文 */
-  function deliverPhoneHandoff(chat, text) {
+  /* 群聊里找最后一个 @名字： —— 主线转手机时用它决定进谁的 iMessage 窗口 */
+  function lastAtSpeaker(text) {
+    const re = /(^|\n)@([^\n：:]{1,24})[：:]/g;
+    let m, last = '';
+    while ((m = re.exec(String(text || ''))) !== null) last = m[2].trim();
+    return last;
+  }
+  /* 主模型在回复末尾写了 [[转手机]] → 把那几行收进手机，主聊天只留正文。
+     群聊时按「@名字：」或最后说话的人投到对应角色的窗口。 */
+  function deliverPhoneHandoff(chat, text, speakerName) {
     text = String(text || '').trim();
     if (!chat || !text) return false;
     const PB = window.PhoneBridge;
     if (!PB || !PB.pushIncoming) return false;
+    let target = String(speakerName || '').trim();
+    const at = text.match(/^\s*@([^\n：:]{1,24})[：:]\s*/);
+    if (at) {
+      target = at[1].trim();
+      text = text.replace(/^\s*@[^\n：:]{1,24}[：:]\s*/, '').trim();
+    }
+    if (!target) target = chat.aiName || '他';
     phoneJudgeAt = Date.now();   // 已经有一条进手机了，不用兜底判定再补一条
-    PB.pushIncoming(text, { chatId: chat.id, name: chat.aiName || '他' });
-    setStatus('📱 他把接下来的话发到你手机上了', false);
+    PB.pushIncoming(text, { chatId: chat.id, name: target, threadName: target });
+    setStatus('📱 ' + target + '把接下来的话发到你手机上了', false);
     return true;
   }
 
@@ -4954,6 +5000,12 @@ button:focus-visible,
       const id = data.chatId || currentChatId;
       const chat = chats.find(function (c) { return c.id === id; });
       if (!chat) return false;
+      /* 群聊：这条是某个成员从手机回到主线，前面加 @名字：，主线才会拆成他的气泡 */
+      const fromName = String(data.threadName || data.name || '').trim();
+      if (chat.groupMode && fromName && fromName !== (chat.aiName || '') &&
+          !/^\s*@[^\n：:]{1,24}[：:]/.test(text)) {
+        text = '@' + fromName + '：' + text;
+      }
       if (!Array.isArray(chat.renderedTurns)) chat.renderedTurns = [];
       /* 同一条返回只写一次（手机可能因为重试再发一遍） */
       const last = chat.renderedTurns[chat.renderedTurns.length - 1];
@@ -6893,6 +6945,17 @@ button:focus-visible,
   const PHONE_HANDOFF_TAG = '[[转手机]]';
   function phoneHandoffPrompt(chat) {
     const me = (getChatUserInfo(chat).name || '').trim() || '她';
+    const members = phoneMemberList(chat);
+    if (members.length > 1) {
+      return '【小手机（iMessage）联动 · 可选】\n' +
+        '本场是群聊：小手机里每个角色都有自己的 iMessage 窗口。当剧情走到「适合用手机短信继续」的节点时，' +
+        '在回复最后另起两行：\n' +
+        PHONE_HANDOFF_TAG + '\n' +
+        '@角色名：（这里写这个角色发到她手机上的那条消息；1-3 句，口语，不要旁白、不要加引号。）\n' +
+        '系统会按「@角色名：」把这条消息投进该角色的手机窗口，只显示在她的手机上，不会出现在主聊天。\n' +
+        '角色名必须是本场出场的人：' + members.map(function(m) { return m.name; }).join('、') + '。\n' +
+        '不是这种节点，绝对不要写这两行。';
+    }
     return '【小手机（iMessage）联动 · 可选】\n' +
       '当剧情走到「适合改用手机短信继续」的节点时（例如：你暂时离开了' + me + '、你们分开了、夜深了、' +
       '有些话当面说不出口、你需要她一个人看手机），在回复的最后另起两行：\n' +
@@ -6979,8 +7042,10 @@ button:focus-visible,
       const turns = (o && o.turns) || [];
       if (!turns.length) return "";
       const lines = turns.slice(-10).map(function (tv) {
-        const who = tv.role === "user" ? "她" : "你";
-        return who + "：" + String(tv.content).slice(0, 300);
+        const content = String(tv.content).slice(0, 300);
+        if (tv.role === "user") return "她：" + content;
+        // 群聊的手机记录已经带 @角色名：，不要再叠一个「你：」
+        return /^@/.test(content) ? content : ("你：" + content);
       });
       return "【她在小手机（iMessage）里跟你的对话，最近的：\n" + lines.join("\n") +
         "\n（这些和主线是同一段时间里的事，别当成没发生；自然接上，不用复述。）" +
@@ -7005,11 +7070,55 @@ button:focus-visible,
     } catch (e) { return ""; }
   }
 
+  /* 群聊里每个成员单独一个手机窗口：只拿「自己的角色设定 + 共用世界观」，
+     不把整份群聊花名册当成“你要同时演所有人”的指令。 */
+  function composeMemberSystemPrompt(chat, name) {
+    if (!chat) return '';
+    const p = getPersona(chat);
+    const list = phoneMemberList(chat);
+    const target = list.find(function(m) { return m.name === name; }) || list[0];
+    const member = groupMembers(chat).find(function(m) { return m.name === target.name; });
+    const parts = [];
+    if (target.id === 'main' || !member) {
+      if (p.aiRole && p.aiRole.trim()) {
+        parts.push('【你扮演的角色：' + (target.name || '他') + '】\n' + p.aiRole.trim());
+      }
+    } else {
+      parts.push('【你扮演的角色：' + target.name + '】\n' +
+        (String(member.persona || '').trim() || '（沿用当前剧情里的人物关系，你就是这个人）'));
+    }
+    ['userRole', 'world', 'style', 'recap'].forEach(function(k) {
+      const f = PERSONA_FIELDS.find(function(x) { return x.key === k; });
+      const v = (p[k] || '').trim();
+      if (v && f) parts.push('【' + f.label + '】\n' + v);
+    });
+    if (list.length > 1) {
+      parts.push('【本场其他角色】（你只以「' + target.name + '」的身份说话，不要替他们说话，也不要写成旁白）\n' +
+        list.filter(function(m) { return m.name !== target.name; }).map(function(m) {
+          return '@' + m.name + '：' + (String(m.persona || '').trim() || '同场角色');
+        }).join('\n'));
+    }
+    parts.push('【你现在在小手机 iMessage 里】\n' +
+      '你就是「' + target.name + '」，这是你和' + ((getChatUserInfo(chat).name || '').trim() || '她') +
+      '的单独聊天窗口。只写你要发给她的消息，不要扮演群里其他人，不要写旁白。');
+    const notes = phoneNotesPrompt(chat);
+    if (notes) parts.push(notes);
+    const ghost = antiGhostLine(chat);
+    if (ghost) parts.push(ghost);
+    return '下面是你在这条角色线里的设定，请全程保持，不要出戏，也不要提及“设定”或“提示词”本身：\n\n' +
+      parts.join('\n\n');
+  }
+
   /* 给小手机（iframe）用的「同一个脑子」接口：同一份人设 / 同一个模型 / 同一把密钥。
      stream() 直接复用主前端的 streamRequest（含直连模式），小手机不再自己拼接口。 */
   window.__RP = {
     ready: true,
     system: function () { const c = getCurrentChat(); return c ? composeSystemPrompt(c, { forPhone: true }) : ""; },
+    memberSystem: function (name) {
+      const c = getCurrentChat();
+      if (!c) return '';
+      return phoneMemberList(c).length > 1 ? composeMemberSystemPrompt(c, name) : composeSystemPrompt(c, { forPhone: true });
+    },
     model: function () { const c = getCurrentChat(); return (c && c.model) || settings.model; },
     chatId: function () { const c = getCurrentChat(); return (c && c.id) || ""; },
     aiName: function () { const c = getCurrentChat(); return (c && c.aiName) || ""; },
@@ -7027,7 +7136,9 @@ button:focus-visible,
         aiAvatarImage: ai.avatarImage || null,
         userName: me.name || '',
         userAvatar: me.avatar || '',
-        userAvatarImage: me.avatarImage || null
+        userAvatarImage: me.avatarImage || null,
+        groupMode: !!c.groupMode,
+        members: phoneMemberList(c)
       };
     },
     stream: async function (messages, onDelta, opts) {
@@ -9354,7 +9465,7 @@ button:focus-visible,
       turn.assistant = split.text;
       if (split.handoff) {
         turn.phoneHandoff = split.handoff;
-        deliverPhoneHandoff(chat, split.handoff);
+        deliverPhoneHandoff(chat, split.handoff, lastAtSpeaker(split.text) || chat.aiName);
       }
       turn.finishReason = finish || '';
       if (!got) {
@@ -9957,7 +10068,7 @@ button:focus-visible,
         currentTurn.assistant = split.text;
         currentTurn.phoneHandoff = split.handoff || '';
         currentTurn.errorNote = '';
-        if (split.handoff) deliverPhoneHandoff(chat, split.handoff);
+        if (split.handoff) deliverPhoneHandoff(chat, split.handoff, lastAtSpeaker(split.text) || chat.aiName);
         setStatus('就绪', false);
       }
 

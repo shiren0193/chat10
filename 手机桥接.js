@@ -60,6 +60,20 @@
     var id = String(p.id || p.chatId || 'default');
     var name = String(p.aiName || p.name || '').trim();
     var uname = String(p.userName || '').trim();
+    var members = Array.isArray(p.members) ? p.members : null;
+    var groupMembers = Array.isArray(p.groupMembers) ? p.groupMembers : [];
+    if (!groupMembers.length && members) {
+      groupMembers = members.filter(function(m) { return m && m.id !== 'main'; });
+    }
+    groupMembers = groupMembers.map(function(m) {
+      return {
+        id: String(m.id || ('m:' + encodeURIComponent(String(m.name || '')))),
+        name: String(m.name || ''),
+        avatar: String(m.avatar || ''),
+        avatarImage: m.avatarImage || null,
+        persona: String(m.persona || '')
+      };
+    }).filter(function(m) { return m.name; });
     return {
       id: id,
       chatId: id,
@@ -71,6 +85,8 @@
       userAvatar: String(p.userAvatar || ''),
       userAvatarImage: p.userAvatarImage || null,
       model: String(p.model || ''),
+      groupMode: !!p.groupMode || groupMembers.length > 0,
+      groupMembers: groupMembers,
       ts: Date.now()
     };
   }
@@ -150,7 +166,6 @@
     frame = wrap.querySelector('.pb-frame');
     frame.addEventListener('load', function () {
       pushAll();
-      clearUnread();
     });
   }
 
@@ -160,7 +175,6 @@
     var p = liveProfile();
     active = p;
     pushAll();
-    clearUnread(p.id);
   }
   function close() {
     if (wrap) wrap.classList.remove('on');
@@ -279,7 +293,12 @@
     lsSet(K_ACTIVE, {
       id: p.id, chatId: p.id, title: p.title, model: p.model,
       aiName: p.aiName, userName: p.userName,
-      aiAvatar: p.aiAvatar, userAvatar: p.userAvatar, ts: p.ts
+      aiAvatar: p.aiAvatar, userAvatar: p.userAvatar,
+      groupMode: p.groupMode,
+      groupMembers: (p.groupMembers || []).map(function(m) {
+        return { id: m.id, name: m.name, avatar: m.avatar, persona: m.persona };
+      }),
+      ts: p.ts
     });
     pushSessionToFrame();
     pushStoryToFrame();
@@ -356,11 +375,21 @@
     var k = keysFor(id).incoming;
     var o = {
       text: text.slice(0, 1200),
-      name: String(opts.name || p.aiName || '他'),
+      name: String(opts.threadName || opts.name || p.aiName || '他'),
+      threadName: String(opts.threadName || opts.name || p.aiName || '他'),
+      threadId: opts.threadId ? String(opts.threadId) : '',
       ts: Date.now(),
       fromMain: true
     };
-    lsSet(k, o);
+    /* 同一个会话可能先后有不同的角色来信；用队列存，手机打开时不会只剩最后一条 */
+    var prev = lsGet(k, null);
+    var queue = [];
+    if (prev) {
+      if (Array.isArray(prev.items)) queue = prev.items.slice();
+      else if (prev.text) queue = [prev];
+    }
+    queue.push(o);
+    lsSet(k, { items: queue.slice(-20), ts: Date.now() });
     post({ source: 'lu-story', type: 'incoming', chatId: id, data: o });
     /* 没打开手机时也要亮红点；手机正开着且就是这一场，就不必再记未读 */
     var openHere = !!(wrap && wrap.classList.contains('on') && id === p.id);
