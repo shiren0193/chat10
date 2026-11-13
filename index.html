@@ -7058,7 +7058,14 @@ button:focus-visible,
     try {
       const o = sessionScopedJSON('phone.notes', chat && chat.id,
         /(陆灼|陸灼)/.test(String(chat && chat.aiName || '')));
-      const list = (o && o.notes) || [];
+      /* 幽灵写手自动写的备忘录不进主 system：它每隔一阵就会变，
+         会把提示词前缀改掉、让上下文缓存全部失效。这里只保留用户自己写的。
+         幽灵写手自己的上下文由小手机端单独拼。 */
+      const list = ((o && o.notes) || []).filter(function (n) {
+        // 新版有 ghost 标记；旧数据用 id 前缀兜底识别幽灵写手
+        const ghost = n.ghost === true || (n.ghost === undefined && /^ai\d/.test(String(n.id || '')));
+        return !ghost;
+      });
       if (!list.length) return "";
       const lines = list.slice(0, 8).map(function (n) {
         const t = String(n.title || "").trim();

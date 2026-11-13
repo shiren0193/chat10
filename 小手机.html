@@ -6569,8 +6569,8 @@ window.hasBrain = function () {
         } else {
           maybeAutoReturn(sp.text);
         }
-        bumpPhoneBadge(sp.text);
-        setTimeout(function(){ maybeWriteMemo(); }, 4000);
+        noteThreadMessage(IM, sp.text);
+        // 不在每條回覆後擲骰子：備忘錄更新太頻繁會不停改 system 前綴、破壞上下文緩存
       } else {
         IM.typing = false;
         pushMsg({ side:'in', text:'（沒有收到內容）' });
@@ -6673,18 +6673,56 @@ window.hasBrain = function () {
   /* ==========================================================
      十一、幽靈寫手：他有機率在她的備忘錄裡偷偷留下一篇
      ----------------------------------------------------------
-     · 每 5 分鐘擲一次骰子，另外她每收到一條回覆後也會擲一次
-     · 只有 20% 會真的動筆，其餘直接跳過（省 token）
+     · 每 20 分鐘才檢查一次，且每條會話至少間隔 1 小時
+     · 只有 15% 會真的動筆，其餘直接跳過（省 token）
+     · 自動寫的筆記不進主 system，避免一直改前綴破壞上下文緩存
      · 真要寫，讓 AI 回一段 JSON，解析後塞進 Memo.addNote
      ========================================================== */
   function ghostRule(){
     return '【系統提示：請以' + activeName() + '的視角，決定是否要在' + userName() + '的備忘錄中偷偷寫下一篇觀察日記。' +
+      '只能根據下面「主線最近發生的事」和「這個 iMessage 窗口最近」來寫，' +
+      '不要憑空編造跟當前劇情無關的日常、人物或事件；最近沒有值得寫的就回覆【IGNORE】。' +
       '如果你想寫，請直接輸出嚴格的 JSON 格式：' +
       '{"action": "add_memo", "folder": "her", "title": "標題", "content": "內容"}。' +
-      '如果不寫，請回覆【IGNORE】。】';
+      '內容要短，像真的隨手記在手機裡的一段，不要寫成長篇小說。';
   }
-  var GHOST_RATE = 0.2;
+  /* 幽靈寫手頻率：至少間隔 1 小時；每 20 分鐘才檢查一次，避免一直改備忘錄
+     把主前端的 system prompt 前綴改掉、導致上下文緩存全部失效。 */
+  var GHOST_RATE = 0.15;
+  var GHOST_MIN_MS = 60 * 60 * 1000;
   var ghostBusy = false;
+
+  function ghostCooldownKey(){ return 'lz.ghost.last.' + SESSION.id + '.v1'; }
+  function ghostLastAt(){
+    try { return Number(localStorage.getItem(ghostCooldownKey())) || 0; } catch(e){ return 0; }
+  }
+  function mainStoryTurns(){
+    try {
+      var o = JSON.parse(localStorage.getItem(bkey('story')) || 'null');
+      return (o && Array.isArray(o.turns)) ? o.turns.length : 0;
+    } catch(e){ return 0; }
+  }
+  function ghostContext(){
+    var parts = [];
+    var main = bridgeContext();
+    if (main) parts.push(main);
+    var recent = IM.messages.filter(function(m) {
+      return (m.type || 'text') === 'text' && m.text;
+    }).slice(-8).map(function(m) {
+      return (m.side === 'in' ? '你：' : '她：') + String(m.text).slice(0, 220);
+    });
+    if (recent.length) parts.push('【这个 iMessage 窗口最近】\n' + recent.join('\n'));
+    var mine = [];
+    try {
+      mine = (window.Memo.list() || []).filter(function(n) {
+        return n.ghost === true || (n.ghost !== false && /^ai\d/.test(String(n.id || '')));
+      }).slice(0, 6).map(function(n) {
+        return '《' + String(n.title || '無標題') + '》' + String(n.body || '').replace(/\s+/g, ' ').slice(0, 160);
+      });
+    } catch(e){}
+    if (mine.length) parts.push('【你之前在备忘录里写过的（保持连贯，不要重复）】\n· ' + mine.join('\n· '));
+    return parts.join('\n\n');
+  }
 
   function ghostParse(raw){
     var t = String(raw || '').trim();
@@ -6705,14 +6743,22 @@ window.hasBrain = function () {
     if (ghostBusy) return;
     if (!window.Memo) return;
     if (!hasBrain()) return;
-    if (!force && Math.random() > GHOST_RATE) return;
+    if (!force) {
+      if (Date.now() - ghostLastAt() < GHOST_MIN_MS) return;
+      if (mainStoryTurns() < 4) return;          // 主線還沒演起來，不寫
+      if (Math.random() > GHOST_RATE) return;
+    }
+    // 先記冷卻時間：就算 AI 這次決定不寫，也不要每隔幾分鐘再來一次
+    try { localStorage.setItem(ghostCooldownKey(), String(Date.now())); } catch(e){}
 
     ghostBusy = true;
     var hostSys = threadSystem();
     var ghostSessionId = SESSION.id;
     var ghostThreadId = IM.id;
+    var extra = ghostContext();
     requestChat([
-      { role: 'system', content: (EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim() },
+      { role: 'system', content: ((EMBEDDED ? hostSys : (hostSys || cfg.prompt || '')).trim() +
+        (extra ? '\n\n' + extra : '')) },
       { role: 'user',   content: ghostRule() }
     ], null).then(function(raw){
       if (SESSION.id !== ghostSessionId || IM.id !== ghostThreadId) return;   // 寫到一半切了會話/窗口：別把日記塞給下一個角色
@@ -7145,7 +7191,7 @@ window.hasBrain = function () {
     });
     setTimeout(scrollChat, 80);
     setInterval(tick, 1000);
-    setInterval(function(){ maybeWriteMemo(); }, 5 * 60 * 1000);   // 幽靈寫手：每 5 分鐘擲一次
+    setInterval(function(){ maybeWriteMemo(); }, 20 * 60 * 1000);  // 幽靈寫手：每 20 分鐘检查一次，且至少间隔 1 小时
   }
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function(){ fit(); layoutClock(); });
@@ -8638,10 +8684,19 @@ C 從九月開始固定在週二四點。
   function syncPhoneNotes() {
     try {
       var out = [];
-      for (var i = 0; i < notes.length && out.length < 8; i++) {
+      for (var i = 0; i < notes.length && out.length < 20; i++) {
         var n = notes[i] || {};
         var body = String(n.body || "").replace(/\s+/g, " ").trim();
-        out.push({ folder: n.folder || "", title: String(n.title || ""), body: body.slice(0, 220), day: n.day || "" });
+        // 幽灵写手写过的旧笔记 id 以 ai 开头；用户手动编辑后 ghost=false，重新进入 system
+        var ghost = n.ghost === true || (n.ghost !== false && /^ai\d/.test(String(n.id || "")));
+        out.push({
+          id: n.id || "",
+          folder: n.folder || "",
+          title: String(n.title || ""),
+          body: body.slice(0, 220),
+          day: n.day || "",
+          ghost: ghost
+        });
       }
       localStorage.setItem("lz.phone.notes." + SESSION.id + ".v1", JSON.stringify({ notes: out, ts: Date.now() }));
     } catch (e) {}
@@ -8974,9 +9029,14 @@ C 從九月開始固定在週二四點。
     if (!editingId) return;
     for (var i = 0; i < notes.length; i++) {
       if (notes[i].id === editingId) {
-        notes[i].title = titleInput.value.trim() || "無標題";
-        notes[i].body = textInput.value;
+        var newTitle = titleInput.value.trim() || "無標題";
+        var newBody = textInput.value;
+        var changed = notes[i].title !== newTitle || notes[i].body !== newBody;
+        notes[i].title = newTitle;
+        notes[i].body = newBody;
         notes[i].day = todayLabel();
+        // 用户亲自改过的幽灵笔记：解除 ghost 标记，重新让主模型看到
+        if (changed) { notes[i].ghost = false; notes[i].userEdited = true; }
         lastSaved = notes[i];
         break;
       }
@@ -9158,7 +9218,8 @@ C 從九月開始固定在週二四點。
         day: todayLabel(),
         title: String(o.title || "無標題").slice(0, 40),
         body: body,
-        co: true
+        co: true,
+        ghost: true          // 幽灵写手自动写的：不进主 system，避免频繁改前缀
       };
       notes.unshift(n);
       persist();
